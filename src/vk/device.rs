@@ -213,11 +213,11 @@ impl<'a> DeviceBuilder<'a> {
             .ok_or_else(|| ErrorCode::SuitablePhysicalDeviceNotFound)?;
         let families = device.queue_families()?;
         // iterate through compute family candidates keeping the indices
-        let compute_families: Vec<_> = families.into_iter()
+        let suitable_families: Vec<_> = families.into_iter()
             .filter(|family| family.is_graphics())
             .collect();
         // request single queue
-        let family = compute_families.into_iter()
+        let family = suitable_families.into_iter()
             .nth(0)
             .ok_or_else(|| ErrorCode::SuitablePhysicalDeviceNotFound)?;
         let family_index = family.index() as u32;

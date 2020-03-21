@@ -125,6 +125,18 @@ impl PhysicalDevice {
             Ok(families)
         }
     }
+
+    pub fn extension_properties(&self) -> Result<Vec<VkExtensionProperties>> {
+        unsafe {
+            let mut count = MaybeUninit::<u32>::zeroed();
+            vkEnumerateDeviceExtensionProperties(self.handle, ptr::null(), count.as_mut_ptr(), ptr::null_mut());
+            let size = count.assume_init() as usize;
+            let mut extensions: Vec<VkExtensionProperties> = Vec::with_capacity(size);
+            extensions.resize(size, std::mem::zeroed());
+            vkEnumerateDeviceExtensionProperties(self.handle, ptr::null(), count.as_mut_ptr(), extensions.as_mut_ptr());
+            Ok(extensions)
+        }
+    }
 }
 
 pub struct QueueFamily {

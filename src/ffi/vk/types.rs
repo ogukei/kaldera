@@ -117,6 +117,7 @@ pub const VK_FLAGS_NONE: VkFlags = 0;
 pub const VK_TRUE: VkBool32 = 1;
 pub const VK_FALSE: VkBool32 = 0;
 pub const VK_QUEUE_FAMILY_IGNORED: u32 = u32::max_value();
+pub const VK_MAX_EXTENSION_NAME_SIZE: size_t = 256;
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkResult.html
 #[repr(C)]
@@ -1071,6 +1072,14 @@ pub enum VkPipelineBindPoint {
     VK_PIPELINE_BIND_POINT_MAX_ENUM = 0x7FFFFFFF
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkExtensionProperties.html
+#[repr(C)]
+#[derive(Clone)]
+pub struct VkExtensionProperties {
+    pub extensionName: [c_char; VK_MAX_EXTENSION_NAME_SIZE],
+    pub specVersion: u32,
+}
+
 #[link(name = "vulkan")]
 extern "C" {
     // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/vkCreateInstance.html
@@ -1410,5 +1419,12 @@ extern "C" {
         device: VkDevice,
         pipelineCache: VkPipelineCache,
         pAllocator: *const VkAllocationCallbacks,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkEnumerateDeviceExtensionProperties.html
+    pub fn vkEnumerateDeviceExtensionProperties(
+        physicalDevice: VkPhysicalDevice,
+        pLayerName: *const c_char,
+        pPropertyCount: *mut u32,
+        pProperties: *mut VkExtensionProperties,
     );
 }

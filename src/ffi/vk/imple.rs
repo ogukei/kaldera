@@ -459,3 +459,10 @@ impl Into<VkBufferUsageFlags> for VkBufferUsageFlagBits {
         self as VkBufferUsageFlags
     }
 }
+
+impl VkExtensionProperties {
+    pub fn extension_name(&self) -> CString {
+        unsafe { CStr::from_ptr(self.extensionName.as_ptr()) }
+            .to_owned()
+    }
+}
