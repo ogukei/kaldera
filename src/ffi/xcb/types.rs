@@ -1,4 +1,7 @@
 
+#![allow(dead_code)]
+#![allow(non_camel_case_types, non_snake_case)]
+
 use libc::{c_void, c_int, c_char, c_uint};
 
 // @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
