@@ -121,7 +121,9 @@ impl<'a> CommandBufferBuilder<'a> {
             vkBeginCommandBuffer(command_buffer, &begin_info)
                 .into_result()
                 .unwrap();
-            op(command_buffer);
+            {
+                op(command_buffer);
+            }
             vkEndCommandBuffer(command_buffer);
             CommandBuffer::new(command_pool, command_buffer, fence)
         }

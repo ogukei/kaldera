@@ -99,7 +99,7 @@ impl Drop for BufferMemory {
     }
 }
 
-enum StagingBufferUsage {
+pub enum StagingBufferUsage {
     Vertex,
     Index,
 }
@@ -128,7 +128,7 @@ impl StagingBufferUsage {
     }
 }
 
-struct StagingBuffer {
+pub struct StagingBuffer {
     command_pool: Arc<CommandPool>,
     host_buffer_memory: Arc<BufferMemory>,
     device_buffer_memory: Arc<BufferMemory>,
@@ -136,7 +136,7 @@ struct StagingBuffer {
 }
 
 impl StagingBuffer {
-    fn new(command_pool: &Arc<CommandPool>, usage: StagingBufferUsage, size: VkDeviceSize) -> Result<Self> {
+    pub fn new(command_pool: &Arc<CommandPool>, usage: StagingBufferUsage, size: VkDeviceSize) -> Result<Arc<Self>> {
         unsafe {
             let device = command_pool.device();
             let host_buffer_memory = BufferMemory::new(
@@ -150,7 +150,7 @@ impl StagingBuffer {
                 usage.device_memory_property_flags(),
                 size)?;
             let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
-                let copy_region = VkBufferCopy::new(0, VK_WHOLE_SIZE);
+                let copy_region = VkBufferCopy::new(0, size);
                 vkCmdCopyBuffer(
                     command_buffer,
                     host_buffer_memory.buffer(),
@@ -165,16 +165,16 @@ impl StagingBuffer {
                 device_buffer_memory,
                 copying_command_buffer: command_buffer,
             };
-            Ok(staging_buffer)
+            Ok(Arc::new(staging_buffer))
         }
     }
 
-    fn write(&self, src: *const c_void, size: usize) {
+    pub fn write(&self, src: *const c_void, size: usize) {
         unsafe {
             let device = self.command_pool.device();
             let host_buffer_memory = &self.host_buffer_memory;
             let mut mapped = MaybeUninit::<*mut c_void>::zeroed();
-            vkMapMemory(device.handle(), host_buffer_memory.memory(), 0, VK_WHOLE_SIZE, 0, mapped.as_mut_ptr())
+            vkMapMemory(device.handle(), host_buffer_memory.memory(), 0, size as VkDeviceSize, 0, mapped.as_mut_ptr())
                 .into_result()
                 .unwrap();
             let mapped = mapped.assume_init();
