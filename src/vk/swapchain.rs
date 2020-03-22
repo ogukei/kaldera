@@ -15,7 +15,8 @@ use libc::{c_float, c_void};
 use std::sync::Arc;
 
 pub struct Swapchain {
-
+    handle: VkSwapchainKHR,
+    device_queues: Arc<DeviceQueues>,
 }
 
 impl Swapchain {
@@ -24,8 +25,8 @@ impl Swapchain {
         let physical_device = device.physical_device();
         let surface = device_queues.surface();
         unsafe {
-            let surface_capabilities = Self::surface_capabilities(physical_device, surface)?;
-            let surface_formats = Self::surface_formats(physical_device, surface)?;
+            let surface_capabilities = surface.capabilities(physical_device)?;
+            let surface_formats = surface.formats(physical_device)?;
             
             let surface_format = surface_formats.iter()
                 .find(|v| v.format == VkFormat::VK_FORMAT_B8G8R8A8_SRGB)
@@ -67,55 +68,26 @@ impl Swapchain {
                 clipped: VK_TRUE,
                 oldSwapchain: std::ptr::null_mut(),
             };
-            Ok(Arc::new(Swapchain {}))
+            let mut handle = MaybeUninit::<VkSwapchainKHR>::zeroed();
+            vkCreateSwapchainKHR(device.handle(), &create_info, std::ptr::null(), handle.as_mut_ptr())
+                .into_result()?;
+            let handle = handle.assume_init();
+            let swapchain = Swapchain {
+                handle,
+                device_queues: Arc::clone(device_queues),
+            };
+            Ok(Arc::new(swapchain))
         }
     }
 
-    fn surface_capabilities(physical_device: &Arc<PhysicalDevice>, surface: &Arc<Surface>) -> Result<VkSurfaceCapabilitiesKHR> {
-        unsafe {
-            let mut capabilities = MaybeUninit::<VkSurfaceCapabilitiesKHR>::zeroed();
-            vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device.handle(), surface.handle(), capabilities.as_mut_ptr())
-                .into_result()
-                .unwrap();
-            let capabilities = capabilities.assume_init();
-            if capabilities.maxImageCount == 0 {
-                return Err(ErrorCode::VkResult(VkResult::VK_ERROR_EXTENSION_NOT_PRESENT).into())
-            }
-            Ok(capabilities)
-        }
-    }
+}
 
-    fn surface_formats(physical_device: &Arc<PhysicalDevice>, surface: &Arc<Surface>) -> Result<Vec<VkSurfaceFormatKHR>> {
+impl Drop for Swapchain {
+    fn drop(&mut self) {
+        log_debug!("Drop Swapchain");
         unsafe {
-            let mut uninit_count = MaybeUninit::<u32>::zeroed();
-            vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.handle(), surface.handle(), uninit_count.as_mut_ptr(), std::ptr::null_mut())
-                .into_result()?;
-            let count = uninit_count.assume_init() as usize;
-            if count == 0 {
-                return Err(ErrorCode::VkResult(VkResult::VK_ERROR_EXTENSION_NOT_PRESENT).into())
-            }
-            let mut formats: Vec<VkSurfaceFormatKHR> = Vec::with_capacity(count);
-            formats.resize(count, std::mem::zeroed());
-            vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device.handle(), surface.handle(), uninit_count.as_mut_ptr(), formats.as_mut_ptr())
-                .into_result()?;
-            Ok(formats)
-        }
-    }
-
-    fn surface_presentation_modes(physical_device: &Arc<PhysicalDevice>, surface: &Arc<Surface>) -> Result<Vec<VkPresentModeKHR>> {
-        unsafe {
-            let mut uninit_count = MaybeUninit::<u32>::zeroed();
-            vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device.handle(), surface.handle(), uninit_count.as_mut_ptr(), std::ptr::null_mut())
-                .into_result()?;
-            let count = uninit_count.assume_init() as usize;
-            if count == 0 {
-                return Err(ErrorCode::VkResult(VkResult::VK_ERROR_EXTENSION_NOT_PRESENT).into())
-            }
-            let mut modes: Vec<VkPresentModeKHR> = Vec::with_capacity(count);
-            modes.resize(count, std::mem::zeroed());
-            vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device.handle(), surface.handle(), uninit_count.as_mut_ptr(), modes.as_mut_ptr())
-                .into_result()?;
-            Ok(modes)
+            let device = self.device_queues.device();
+            vkDestroySwapchainKHR(device.handle(), self.handle, std::ptr::null());
         }
     }
 }

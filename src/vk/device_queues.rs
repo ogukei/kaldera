@@ -10,9 +10,9 @@ use super::surface::{Surface};
 use std::ptr;
 use std::mem;
 use std::mem::MaybeUninit;
-use libc::{c_float, c_void};
+use libc::{c_float, c_void, c_char};
 use std::sync::Arc;
-use std::io::Read;
+use std::ffi::CString;
 
 pub struct DeviceQueuesBuilder {
     surface: Arc<Surface>,
@@ -42,13 +42,19 @@ impl DeviceQueuesBuilder {
             .and_then(|a| present_family.map(|b| (a, b)))
             .ok_or_else(|| ErrorCode::SuitableQueueFamilyNotFound)?;
         // create infos
+        let extension_names = vec![
+            CString::new("VK_KHR_swapchain").unwrap()
+        ];
+        let extension_name_ptrs: Vec<*const c_char> = extension_names.iter()
+            .map(|v| v.as_ptr())
+            .collect();
         let priority: c_float = 0.0;
         if (graphics_family as *const QueueFamily) == (present_family as *const QueueFamily) {
             // unique family
             let family = graphics_family;
             let family_index = family.index();
             let queue_create_info = VkDeviceQueueCreateInfo::new(family_index, 1, &priority);
-            let device_create_info = VkDeviceCreateInfo::new(1, &queue_create_info);
+            let device_create_info = unsafe { VkDeviceCreateInfo::new(1, &queue_create_info, &extension_name_ptrs) };
             unsafe {
                 let mut handle = MaybeUninit::<VkDevice>::zeroed();
                 vkCreateDevice(physical_device.handle(), &device_create_info, std::ptr::null(), handle.as_mut_ptr())
@@ -69,7 +75,12 @@ impl DeviceQueuesBuilder {
                 VkDeviceQueueCreateInfo::new(graphics_family.index(), 1, &priority),
                 VkDeviceQueueCreateInfo::new(present_family.index(), 1, &priority),
             ];
-            let device_create_info = VkDeviceCreateInfo::new(queue_create_infos.len() as u32, queue_create_infos.as_ptr());
+            let device_create_info = unsafe { 
+                VkDeviceCreateInfo::new(
+                    queue_create_infos.len() as u32, 
+                    queue_create_infos.as_ptr(),
+                    &extension_name_ptrs)
+            };
             unsafe {
                 let mut handle = MaybeUninit::<VkDevice>::zeroed();
                 vkCreateDevice(physical_device.handle(), &device_create_info, std::ptr::null(), handle.as_mut_ptr())

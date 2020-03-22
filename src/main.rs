@@ -1,6 +1,7 @@
 
 extern crate karst;
 
+use karst::ffi::vk::*;
 use karst::ffi::xcb::*;
 use karst::vk::*;
 
@@ -14,6 +15,7 @@ fn main() {
     let device_queues = DeviceQueuesBuilder::new(&surface)
         .build()
         .unwrap();
+    let swapchain = Swapchain::new(&device_queues, VkExtent2D { width: 400, height: 400 }).unwrap();
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
     let vertices = vec![
         Vertex {

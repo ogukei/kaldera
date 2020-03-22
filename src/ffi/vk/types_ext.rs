@@ -172,6 +172,19 @@ extern "C" {
         surface: VkSurfaceKHR,
         pSupported: *mut VkBool32,
     ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateSwapchainKHR.html
+    pub fn vkCreateSwapchainKHR(
+        device: VkDevice,
+        pCreateInfo: *const VkSwapchainCreateInfoKHR,
+        pAllocator: *const VkAllocationCallbacks,
+        pSwapchain: *mut VkSwapchainKHR,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroySwapchainKHR.html
+    pub fn vkDestroySwapchainKHR(
+        device: VkDevice,
+        swapchain: VkSwapchainKHR,
+        pAllocator: *const VkAllocationCallbacks,
+    );
 }
 
 mod xcb {

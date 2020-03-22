@@ -29,7 +29,7 @@ impl Instance {
             .map(|v| v.as_ptr())
             .collect();
         unsafe {
-            let instance_info = VkInstanceCreateInfo::with_extensions(&app_info, &extension_name_ptrs);
+            let instance_info = VkInstanceCreateInfo::new(&app_info, &extension_name_ptrs);
             let mut handle = MaybeUninit::<VkInstance>::zeroed();
             vkCreateInstance(&instance_info, ptr::null(), handle.as_mut_ptr())
                 .into_result()?;
