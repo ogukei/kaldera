@@ -70,10 +70,12 @@ impl VkQueueFamilyProperties {
         }
     }
 
+    #[inline]
     pub fn has_compute_queue_bit(&self) -> bool {
         (self.queueFlags & (VkQueueFlagBits::VK_QUEUE_COMPUTE_BIT as u32)) != 0
     }
 
+    #[inline]
     pub fn has_graphics_queue_bit(&self) -> bool {
         (self.queueFlags & (VkQueueFlagBits::VK_QUEUE_GRAPHICS_BIT as u32)) != 0
     }

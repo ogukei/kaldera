@@ -6,10 +6,15 @@ use karst::vk::*;
 
 fn main() {
     let instance = Instance::new().unwrap();
-    let device = DeviceBuilder::new(&instance)
+
+    let connection = XcbConnection::new();
+    let window = XcbWindow::new(&connection);
+    let surface = XcbSurface::new(&instance, &window).unwrap();
+
+    let device_queues = DeviceQueuesBuilder::new(&surface)
         .build()
         .unwrap();
-    let command_pool = CommandPool::new(&device).unwrap();
+    let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
     let vertices = vec![
         Vertex {
             coordinate: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
@@ -29,13 +34,9 @@ fn main() {
     ];
     let staging_buffer = RenderStagingBuffer::new(&command_pool, vertices, indices);
 
-    println!("{:?}", device.handle());
-    unsafe { 
-        let connection = XcbConnection::new();
-        let window = XcbWindow::new(&connection);
+    println!("{:?}", device_queues.device().handle());
+    unsafe {
         window.flush();
-        let surface = XcbSurface::new(&instance, &window).unwrap();
-        let swapchain = Swapchain::new(&device, &surface).unwrap();
         std::thread::sleep_ms(1000);
     }
 }
