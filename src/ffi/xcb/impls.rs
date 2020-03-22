@@ -40,7 +40,7 @@ impl XcbConnection {
     }
 
     #[inline]
-    fn handle(&self) -> *mut xcb_connection_t {
+    pub fn handle(&self) -> *mut xcb_connection_t {
         self.handle
     }
 }
@@ -123,5 +123,13 @@ impl XcbWindow {
         unsafe {
             xcb_flush(self.connection.handle());
         }
+    }
+
+    pub fn connection(&self) -> &Arc<XcbConnection> {
+        &self.connection
+    }
+
+    pub fn handle(&self) -> xcb_window_t {
+        self.handle
     }
 }

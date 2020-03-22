@@ -34,6 +34,7 @@ pub type VkPipelineShaderStageCreateFlags = VkFlags;
 pub type VkShaderModuleCreateFlags = VkFlags;
 pub type VkAccessFlags = VkFlags;
 pub type VkDependencyFlags = VkFlags;
+pub type VkImageUsageFlags = VkFlags;
 
 #[repr(C)]
 pub struct VkInstanceOpaque { _private: [u8; 0] }
@@ -156,6 +157,14 @@ pub enum VkResult {
     VK_ERROR_INVALID_DEVICE_ADDRESS_EXT = -1000244000,
     VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT = -1000255000,
     VK_RESULT_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkExtent2D.html
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct VkExtent2D {
+    pub width: u32,
+    pub height: u32,
 }
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkExtent3D.html

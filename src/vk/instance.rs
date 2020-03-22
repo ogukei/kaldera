@@ -21,7 +21,13 @@ impl Instance {
         let application_name = CString::new("karst")?;
         let engine_name = CString::new("Stalagmite Engine")?;
         let app_info = VkApplicationInfo::new(application_name.as_ptr(), 0, engine_name.as_ptr(), 0);
-        let instance_info = VkInstanceCreateInfo::new(&app_info);
+        let extension_names = vec![
+            CString::new("VK_KHR_display").unwrap(),
+            CString::new("VK_KHR_surface").unwrap(),
+            CString::new("VK_KHR_xcb_surface").unwrap(),
+            CString::new("VK_KHR_xlib_surface").unwrap(),
+        ];
+        let instance_info = VkInstanceCreateInfo::with_extensions(&app_info, &extension_names);
         unsafe {
             let mut handle = MaybeUninit::<VkInstance>::zeroed();
             vkCreateInstance(&instance_info, ptr::null(), handle.as_mut_ptr())

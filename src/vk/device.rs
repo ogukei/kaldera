@@ -212,7 +212,7 @@ impl<'a> DeviceBuilder<'a> {
             .nth(0)
             .ok_or_else(|| ErrorCode::SuitablePhysicalDeviceNotFound)?;
         let families = device.queue_families()?;
-        // iterate through compute family candidates keeping the indices
+        // iterate through graphics family candidates keeping the indices
         let suitable_families: Vec<_> = families.into_iter()
             .filter(|family| family.is_graphics())
             .collect();

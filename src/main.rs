@@ -30,12 +30,12 @@ fn main() {
     let staging_buffer = RenderStagingBuffer::new(&command_pool, vertices, indices);
 
     println!("{:?}", device.handle());
-    unsafe { unsafe_main() }
-}
-
-unsafe fn unsafe_main() {
-    let connection = XcbConnection::new();
-    let window = XcbWindow::new(&connection);
-    window.flush();
-    std::thread::sleep_ms(1000);
+    unsafe { 
+        let connection = XcbConnection::new();
+        let window = XcbWindow::new(&connection);
+        window.flush();
+        //let surface = XcbSurface::new(&instance, &window).unwrap();
+        //let swapchain = Swapchain::new(&device, &surface).unwrap();
+        std::thread::sleep_ms(1000);
+    }
 }
