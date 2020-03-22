@@ -185,6 +185,13 @@ extern "C" {
         swapchain: VkSwapchainKHR,
         pAllocator: *const VkAllocationCallbacks,
     );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetSwapchainImagesKHR.html
+    pub fn vkGetSwapchainImagesKHR(
+        device: VkDevice,
+        swapchain: VkSwapchainKHR,
+        pSwapchainImageCount: *mut u32,
+        pSwapchainImages: *mut VkImage,
+    ) -> VkResult;
 }
 
 mod xcb {

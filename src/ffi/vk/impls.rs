@@ -471,3 +471,14 @@ impl VkExtensionProperties {
             .to_owned()
     }
 }
+
+impl Default for VkComponentMapping {
+    fn default() -> Self {
+        VkComponentMapping {
+            r: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_R,
+            g: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_G,
+            b: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_B,
+            a: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_A,
+        }
+    }
+}

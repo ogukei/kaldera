@@ -35,6 +35,8 @@ pub type VkShaderModuleCreateFlags = VkFlags;
 pub type VkAccessFlags = VkFlags;
 pub type VkDependencyFlags = VkFlags;
 pub type VkImageUsageFlags = VkFlags;
+pub type VkImageViewCreateFlags = VkFlags;
+pub type VkImageAspectFlags = VkFlags;
 
 #[repr(C)]
 pub struct VkInstanceOpaque { _private: [u8; 0] }
@@ -108,6 +110,9 @@ pub type VkMemoryBarrier = *mut VkMemoryBarrierOpaque;
 #[repr(C)]
 pub struct VkImageMemoryBarrierOpaque { _private: [u8; 0] }
 pub type VkImageMemoryBarrier = *mut VkImageMemoryBarrierOpaque;
+#[repr(C)]
+pub struct VkImageOpaque { _private: [u8; 0] }
+pub type VkImage = *mut VkImageOpaque;
 
 pub const VK_MAX_PHYSICAL_DEVICE_NAME_SIZE: size_t = 256;
 pub const VK_UUID_SIZE: size_t = 16;
@@ -1300,6 +1305,85 @@ pub enum VkImageUsageFlagBits {
     VK_IMAGE_USAGE_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageAspectFlagBits.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkImageAspectFlagBits {
+    VK_IMAGE_ASPECT_COLOR_BIT = 0x00000001,
+    VK_IMAGE_ASPECT_DEPTH_BIT = 0x00000002,
+    VK_IMAGE_ASPECT_STENCIL_BIT = 0x00000004,
+    VK_IMAGE_ASPECT_METADATA_BIT = 0x00000008,
+    VK_IMAGE_ASPECT_PLANE_0_BIT = 0x00000010,
+    VK_IMAGE_ASPECT_PLANE_1_BIT = 0x00000020,
+    VK_IMAGE_ASPECT_PLANE_2_BIT = 0x00000040,
+    VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT = 0x00000080,
+    VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT = 0x00000100,
+    VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT = 0x00000200,
+    VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT = 0x00000400,
+    VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageViewType.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkImageViewType {
+    VK_IMAGE_VIEW_TYPE_1D = 0,
+    VK_IMAGE_VIEW_TYPE_2D = 1,
+    VK_IMAGE_VIEW_TYPE_3D = 2,
+    VK_IMAGE_VIEW_TYPE_CUBE = 3,
+    VK_IMAGE_VIEW_TYPE_1D_ARRAY = 4,
+    VK_IMAGE_VIEW_TYPE_2D_ARRAY = 5,
+    VK_IMAGE_VIEW_TYPE_CUBE_ARRAY = 6,
+    VK_IMAGE_VIEW_TYPE_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkComponentSwizzle.html
+#[repr(C)]
+pub enum VkComponentSwizzle {
+    VK_COMPONENT_SWIZZLE_IDENTITY = 0,
+    VK_COMPONENT_SWIZZLE_ZERO = 1,
+    VK_COMPONENT_SWIZZLE_ONE = 2,
+    VK_COMPONENT_SWIZZLE_R = 3,
+    VK_COMPONENT_SWIZZLE_G = 4,
+    VK_COMPONENT_SWIZZLE_B = 5,
+    VK_COMPONENT_SWIZZLE_A = 6,
+    VK_COMPONENT_SWIZZLE_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkComponentMapping.html
+#[repr(C)]
+pub struct VkComponentMapping {
+    pub r: VkComponentSwizzle,
+    pub g: VkComponentSwizzle,
+    pub b: VkComponentSwizzle,
+    pub a: VkComponentSwizzle,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageViewCreateInfo.html
+#[repr(C)]
+pub struct VkImageViewCreateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub flags: VkImageViewCreateFlags,
+    pub image: VkImage,
+    pub viewType: VkImageViewType,
+    pub format: VkFormat,
+    pub components: VkComponentMapping,
+    pub subresourceRange: VkImageSubresourceRange,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageSubresourceRange.html
+#[repr(C)]
+pub struct VkImageSubresourceRange {
+    pub aspectMask: VkImageAspectFlags,
+    pub baseMipLevel: u32,
+    pub levelCount: u32,
+    pub baseArrayLayer: u32,
+    pub layerCount: u32,
+}
+
 #[link(name = "vulkan")]
 extern "C" {
     // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/vkCreateInstance.html
@@ -1653,4 +1737,17 @@ extern "C" {
         pPropertyCount: *mut u32,
         pProperties: *mut VkExtensionProperties,
     ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateImageView.html
+    pub fn vkCreateImageView(
+        device: VkDevice,
+        pCreateInfo: *const VkImageViewCreateInfo,
+        pAllocator: *const VkAllocationCallbacks,
+        pView: *mut VkImageView,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroyImageView.html
+    pub fn vkDestroyImageView(
+        device: VkDevice,
+        imageView: VkImageView,
+        pAllocator: *const VkAllocationCallbacks,
+    );
 }
