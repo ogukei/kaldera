@@ -30,7 +30,10 @@ impl VkApplicationInfo {
 }
 
 impl VkInstanceCreateInfo {
-    pub fn new(p_application_info: *const VkApplicationInfo) -> Self {
+    pub unsafe fn new(
+        p_application_info: *const VkApplicationInfo,
+        extension_names: &Vec<*const c_char>,
+    ) -> Self {
         VkInstanceCreateInfo { 
             sType: VkStructureType::VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             pNext: ptr::null(),
@@ -38,8 +41,8 @@ impl VkInstanceCreateInfo {
             pApplicationInfo: p_application_info,
             enabledLayerCount: 0,
             ppEnabledLayerNames: ptr::null(),
-            enabledExtensionCount: 0,
-            ppEnabledExtensionNames: ptr::null(),
+            enabledExtensionCount: extension_names.len() as u32,
+            ppEnabledExtensionNames: extension_names.as_ptr(),
         }
     }
 }
@@ -54,10 +57,12 @@ impl VkQueueFamilyProperties {
         }
     }
 
+    #[inline]
     pub fn has_compute_queue_bit(&self) -> bool {
         (self.queueFlags & (VkQueueFlagBits::VK_QUEUE_COMPUTE_BIT as u32)) != 0
     }
 
+    #[inline]
     pub fn has_graphics_queue_bit(&self) -> bool {
         (self.queueFlags & (VkQueueFlagBits::VK_QUEUE_GRAPHICS_BIT as u32)) != 0
     }
@@ -87,10 +92,10 @@ impl VkDeviceQueueCreateInfo {
 }
 
 impl VkDeviceCreateInfo {
-    pub fn new(
+    pub unsafe fn new(
         create_queue_info_count: u32, 
-        create_queue_infos: *const VkDeviceQueueCreateInfo) -> Self {
-
+        create_queue_infos: *const VkDeviceQueueCreateInfo,
+        extension_names: &Vec<*const c_char>) -> Self {
         VkDeviceCreateInfo {
             sType: VkStructureType::VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
             pNext: ptr::null(),
@@ -99,8 +104,8 @@ impl VkDeviceCreateInfo {
             pQueueCreateInfos: create_queue_infos,
             enabledLayerCount: 0,
             ppEnabledLayerNames: ptr::null(),
-            enabledExtensionCount: 0,
-            ppEnabledExtensionNames: ptr::null(),
+            enabledExtensionCount: extension_names.len() as u32,
+            ppEnabledExtensionNames: extension_names.as_ptr(),
             pEnabledFeatures: ptr::null(),
         }
     }

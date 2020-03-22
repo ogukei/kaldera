@@ -21,8 +21,15 @@ impl Instance {
         let application_name = CString::new("karst")?;
         let engine_name = CString::new("Stalagmite Engine")?;
         let app_info = VkApplicationInfo::new(application_name.as_ptr(), 0, engine_name.as_ptr(), 0);
-        let instance_info = VkInstanceCreateInfo::new(&app_info);
+        let extension_names: Vec<CString> = vec![
+            CString::new("VK_KHR_surface").unwrap(),
+            CString::new("VK_KHR_xcb_surface").unwrap(),
+        ];
+        let extension_name_ptrs = extension_names.iter()
+            .map(|v| v.as_ptr())
+            .collect();
         unsafe {
+            let instance_info = VkInstanceCreateInfo::new(&app_info, &extension_name_ptrs);
             let mut handle = MaybeUninit::<VkInstance>::zeroed();
             vkCreateInstance(&instance_info, ptr::null(), handle.as_mut_ptr())
                 .into_result()?;
@@ -35,6 +42,20 @@ impl Instance {
     #[inline]
     pub fn handle(&self) -> VkInstance {
         self.handle
+    }
+
+    pub fn extension_properties() -> Result<Vec<VkExtensionProperties>> {
+        unsafe {
+            let mut count = MaybeUninit::<u32>::zeroed();
+            vkEnumerateInstanceExtensionProperties(std::ptr::null(), count.as_mut_ptr(), std::ptr::null_mut())
+                .into_result()?;
+            let size = count.assume_init() as usize;
+            let mut extensions: Vec<VkExtensionProperties> = Vec::with_capacity(size);
+            extensions.resize(size, std::mem::zeroed());
+            vkEnumerateInstanceExtensionProperties(std::ptr::null(), count.as_mut_ptr(), extensions.as_mut_ptr())
+                .into_result()?;
+            Ok(extensions)
+        }
     }
 }
 
@@ -120,7 +141,7 @@ impl PhysicalDevice {
             vkGetPhysicalDeviceQueueFamilyProperties(self.handle, count.as_mut_ptr(), families.as_mut_ptr());
             let families: Vec<QueueFamily> = families.into_iter()
                 .enumerate()
-                .map(|(i,v)| QueueFamily::new(i, v))
+                .map(|(i, v)| QueueFamily::new(i as u32, v))
                 .collect();
             Ok(families)
         }
@@ -139,18 +160,19 @@ impl PhysicalDevice {
     }
 }
 
+#[derive(Clone)]
 pub struct QueueFamily {
-    index: usize,
+    index: u32,
     property: VkQueueFamilyProperties,
 }
 
 impl QueueFamily {
-    pub fn new(index: usize, property: VkQueueFamilyProperties) -> Self {
+    pub fn new(index: u32, property: VkQueueFamilyProperties) -> Self {
         QueueFamily { index: index, property: property }
     }
 
     #[inline]
-    pub fn index(&self) -> usize {
+    pub fn index(&self) -> u32 {
         self.index
     }
 

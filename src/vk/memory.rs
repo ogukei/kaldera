@@ -138,7 +138,7 @@ pub struct StagingBuffer {
 impl StagingBuffer {
     pub fn new(command_pool: &Arc<CommandPool>, usage: StagingBufferUsage, size: VkDeviceSize) -> Result<Arc<Self>> {
         unsafe {
-            let device = command_pool.device();
+            let device = command_pool.queue().device();
             let host_buffer_memory = BufferMemory::new(
                 device,
                 usage.host_buffer_usage_flags(),
@@ -171,7 +171,7 @@ impl StagingBuffer {
 
     pub fn write(&self, src: *const c_void, size: usize) {
         unsafe {
-            let device = self.command_pool.device();
+            let device = self.command_pool.queue().device();
             let host_buffer_memory = &self.host_buffer_memory;
             let mut mapped = MaybeUninit::<*mut c_void>::zeroed();
             vkMapMemory(device.handle(), host_buffer_memory.memory(), 0, size as VkDeviceSize, 0, mapped.as_mut_ptr())

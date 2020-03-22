@@ -13,19 +13,21 @@ use std::io::Read;
 
 pub struct Device {
     handle: VkDevice,
-    queue: Queue,
     physical_device: Arc<PhysicalDevice>,
 }
 
 impl Device {
-    #[inline]
-    pub fn handle(&self) -> VkDevice {
-        self.handle
+    pub(crate) fn new(handle: VkDevice, physical_device: &Arc<PhysicalDevice>) -> Arc<Device> {
+        let device = Device {
+            handle,
+            physical_device: Arc::clone(physical_device),
+        };
+        Arc::new(device)
     }
 
     #[inline]
-    pub fn queue(&self) -> &Queue {
-        &self.queue
+    pub fn handle(&self) -> VkDevice {
+        self.handle
     }
 
     #[inline]
@@ -46,20 +48,21 @@ impl Drop for Device {
 
 pub struct CommandPool {
     handle: VkCommandPool,
-    device: Arc<Device>,
+    queue: Arc<Queue>,
 }
 
 impl CommandPool {
-    pub fn new(device: &Arc<Device>) -> Result<Arc<Self>> {
+    pub fn new(queue: &Arc<Queue>) -> Result<Arc<Self>> {
         unsafe {
+            let device = queue.device();
             let mut handle = MaybeUninit::<VkCommandPool>::zeroed();
-            let info = VkCommandPoolCreateInfo::new(device.queue().family().index() as u32);
-            vkCreateCommandPool(device.handle, &info, ptr::null(), handle.as_mut_ptr())
+            let info = VkCommandPoolCreateInfo::new(queue.family().index() as u32);
+            vkCreateCommandPool(device.handle(), &info, ptr::null(), handle.as_mut_ptr())
                 .into_result()?;
             let handle = handle.assume_init();
             let command_pool = CommandPool {
                 handle: handle,
-                device: Arc::clone(device),
+                queue: Arc::clone(queue),
             };
             Ok(Arc::new(command_pool))
         }
@@ -71,8 +74,8 @@ impl CommandPool {
     }
 
     #[inline]
-    pub fn device(&self) -> &Arc<Device> {
-        &self.device
+    pub fn queue(&self) -> &Arc<Queue> {
+        &self.queue
     }
 }
 
@@ -80,7 +83,7 @@ impl Drop for CommandPool {
     fn drop(&mut self) {
         log_debug!("Drop CommandPool");
         unsafe {
-            vkDestroyCommandPool(self.device.handle(), self.handle, ptr::null());
+            vkDestroyCommandPool(self.queue().device().handle(), self.handle, ptr::null());
             self.handle = ptr::null_mut();
         }
     }
@@ -100,7 +103,7 @@ impl<'a> CommandBufferBuilder<'a> {
     pub fn build<F>(self, op: F) -> Arc<CommandBuffer> where F: FnOnce(VkCommandBuffer) -> () {
         unsafe {
             let command_pool = self.command_pool;
-            let device = command_pool.device();
+            let device = command_pool.queue().device();
             let mut command_buffer = MaybeUninit::<VkCommandBuffer>::zeroed();
             {
                 let alloc_info = VkCommandBufferAllocateInfo::new(command_pool.handle(), VkCommandBufferLevel::VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1);
@@ -148,14 +151,15 @@ impl CommandBuffer {
 
     pub fn submit_then_wait(&self, wait_mask: VkPipelineStageFlags) {
         unsafe {
-            let device = self.command_pool.device();
+            let queue = self.command_pool.queue();
+            let device = queue.device();
             let fence = self.fence;
             let command_buffer = self.handle;
             vkResetFences(device.handle(), 1, &fence)
                 .into_result()
                 .unwrap();
             let submit_info = VkSubmitInfo::with_command_buffer_wait(1, &command_buffer, &wait_mask);
-            vkQueueSubmit(device.queue().handle(), 1, &submit_info, fence);
+            vkQueueSubmit(queue.handle(), 1, &submit_info, fence);
             vkWaitForFences(device.handle(), 1, &fence, VK_TRUE, u64::max_value())
                 .into_result()
                 .unwrap();
@@ -165,9 +169,10 @@ impl CommandBuffer {
 
 impl Drop for CommandBuffer {
     fn drop(&mut self) {
+        log_debug!("Drop CommandBuffer");
         unsafe {
             let command_pool = &self.command_pool;
-            let device = command_pool.device();
+            let device = command_pool.queue().device();
             vkDestroyFence(device.handle(), self.fence, ptr::null());
             self.fence = ptr::null_mut();
             vkFreeCommandBuffers(device.handle(), command_pool.handle(), 1, &self.handle);
@@ -179,11 +184,17 @@ impl Drop for CommandBuffer {
 pub struct Queue {
     handle: VkQueue,
     family: QueueFamily,
+    device: Arc<Device>,
 }
 
 impl Queue {
-    fn new(handle: VkQueue, family: QueueFamily) -> Self {
-        Queue { handle: handle, family: family }
+    pub fn new(handle: VkQueue, family: QueueFamily, device: &Arc<Device>) -> Arc<Self> {
+        let queue = Queue { 
+            handle: handle, 
+            family: family,
+            device: Arc::clone(device),
+        };
+        Arc::new(queue)
     }
 
     #[inline]
@@ -195,51 +206,10 @@ impl Queue {
     pub fn family(&self) -> &QueueFamily {
         &self.family
     }
-}
 
-pub struct DeviceBuilder<'a> {
-    instance: &'a Arc<Instance>,
-}
-
-impl<'a> DeviceBuilder<'a> {
-    pub fn new(instance: &'a Arc<Instance>) -> Self {
-        DeviceBuilder { instance }
-    }
-
-    pub fn build(self) -> Result<Arc<Device>> {
-        let devices = PhysicalDevicesBuilder::new(self.instance).build()?;
-        let device = devices.into_iter()
-            .nth(0)
-            .ok_or_else(|| ErrorCode::SuitablePhysicalDeviceNotFound)?;
-        let families = device.queue_families()?;
-        // iterate through compute family candidates keeping the indices
-        let suitable_families: Vec<_> = families.into_iter()
-            .filter(|family| family.is_graphics())
-            .collect();
-        // request single queue
-        let family = suitable_families.into_iter()
-            .nth(0)
-            .ok_or_else(|| ErrorCode::SuitablePhysicalDeviceNotFound)?;
-        let family_index = family.index() as u32;
-        let priority: c_float = 0.0;
-        let queue_create_info = VkDeviceQueueCreateInfo::new(family_index, 1, &priority);
-        let device_create_info = VkDeviceCreateInfo::new(1, &queue_create_info);
-        unsafe {
-            let mut handle = MaybeUninit::<VkDevice>::zeroed();
-            vkCreateDevice(device.handle(), &device_create_info, std::ptr::null(), handle.as_mut_ptr())
-                .into_result()?;
-            let handle = handle.assume_init();
-            // queues
-            let mut queue = MaybeUninit::<VkQueue>::zeroed();
-            vkGetDeviceQueue(handle, family_index, 0, queue.as_mut_ptr());
-            let queue = Queue::new(queue.assume_init(), family);
-            let device = Device {
-                handle: handle,
-                queue: queue,
-                physical_device: device,
-            };
-            Ok(Arc::new(device))
-        }
+    #[inline]
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
     }
 }
 
