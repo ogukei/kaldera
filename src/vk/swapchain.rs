@@ -26,7 +26,7 @@ impl Swapchain {
                 .into_result()
                 .unwrap();
             let capabilies = capabilies.assume_init();
-            println!("minImageCount {}, minImageExtent {:?}", capabilies.minImageCount, capabilies.minImageExtent);
+            println!("supportedUsageFlags {}, minImageExtent {:?}", capabilies.supportedUsageFlags, capabilies.minImageExtent);
             Ok(Arc::new(Swapchain {}))
         }
         

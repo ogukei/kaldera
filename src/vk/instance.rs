@@ -21,14 +21,15 @@ impl Instance {
         let application_name = CString::new("karst")?;
         let engine_name = CString::new("Stalagmite Engine")?;
         let app_info = VkApplicationInfo::new(application_name.as_ptr(), 0, engine_name.as_ptr(), 0);
-        let extension_names = vec![
-            CString::new("VK_KHR_display").unwrap(),
+        let extension_names: Vec<CString> = vec![
             CString::new("VK_KHR_surface").unwrap(),
             CString::new("VK_KHR_xcb_surface").unwrap(),
-            CString::new("VK_KHR_xlib_surface").unwrap(),
         ];
-        let instance_info = VkInstanceCreateInfo::with_extensions(&app_info, &extension_names);
+        let extension_name_ptrs = extension_names.iter()
+            .map(|v| v.as_ptr())
+            .collect();
         unsafe {
+            let instance_info = VkInstanceCreateInfo::with_extensions(&app_info, &extension_name_ptrs);
             let mut handle = MaybeUninit::<VkInstance>::zeroed();
             vkCreateInstance(&instance_info, ptr::null(), handle.as_mut_ptr())
                 .into_result()?;
@@ -41,6 +42,20 @@ impl Instance {
     #[inline]
     pub fn handle(&self) -> VkInstance {
         self.handle
+    }
+
+    pub fn extension_properties() -> Result<Vec<VkExtensionProperties>> {
+        unsafe {
+            let mut count = MaybeUninit::<u32>::zeroed();
+            vkEnumerateInstanceExtensionProperties(std::ptr::null(), count.as_mut_ptr(), std::ptr::null_mut())
+                .into_result()?;
+            let size = count.assume_init() as usize;
+            let mut extensions: Vec<VkExtensionProperties> = Vec::with_capacity(size);
+            extensions.resize(size, std::mem::zeroed());
+            vkEnumerateInstanceExtensionProperties(std::ptr::null(), count.as_mut_ptr(), extensions.as_mut_ptr())
+                .into_result()?;
+            Ok(extensions)
+        }
     }
 }
 

@@ -34,8 +34,8 @@ fn main() {
         let connection = XcbConnection::new();
         let window = XcbWindow::new(&connection);
         window.flush();
-        //let surface = XcbSurface::new(&instance, &window).unwrap();
-        //let swapchain = Swapchain::new(&device, &surface).unwrap();
+        let surface = XcbSurface::new(&instance, &window).unwrap();
+        let swapchain = Swapchain::new(&device, &surface).unwrap();
         std::thread::sleep_ms(1000);
     }
 }

@@ -1436,4 +1436,10 @@ extern "C" {
         pPropertyCount: *mut u32,
         pProperties: *mut VkExtensionProperties,
     );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkEnumerateInstanceExtensionProperties.html
+    pub fn vkEnumerateInstanceExtensionProperties(
+        pLayerName: *const c_char,
+        pPropertyCount: *mut u32,
+        pProperties: *mut VkExtensionProperties,
+    ) -> VkResult;
 }

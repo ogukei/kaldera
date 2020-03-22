@@ -43,13 +43,10 @@ impl VkInstanceCreateInfo {
         }
     }
 
-    pub fn with_extensions(
+    pub unsafe fn with_extensions(
         p_application_info: *const VkApplicationInfo,
-        extension_names: &Vec<CString>,
+        extension_names: &Vec<*const c_char>,
     ) -> Self {
-        let extension_name_ptrs: Vec<*const c_char> = extension_names.iter()
-            .map(|v| v.as_ptr())
-            .collect();
         VkInstanceCreateInfo { 
             sType: VkStructureType::VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
             pNext: ptr::null(),
@@ -57,8 +54,8 @@ impl VkInstanceCreateInfo {
             pApplicationInfo: p_application_info,
             enabledLayerCount: 0,
             ppEnabledLayerNames: ptr::null(),
-            enabledExtensionCount: extension_name_ptrs.len() as u32,
-            ppEnabledExtensionNames: extension_name_ptrs.as_ptr(),
+            enabledExtensionCount: extension_names.len() as u32,
+            ppEnabledExtensionNames: extension_names.as_ptr(),
         }
     }
 }
