@@ -16,8 +16,7 @@ fn main() {
         .build()
         .unwrap();
     let swapchain = Swapchain::new(&device_queues, VkExtent2D { width: 400, height: 400 }).unwrap();
-    let image = DepthStencilImage::new(device_queues.device(), VkExtent3D { width: 400, height: 400, depth: 1, });
-    
+
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
     let vertices = vec![
         Vertex {
