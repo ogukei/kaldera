@@ -37,6 +37,7 @@ pub type VkDependencyFlags = VkFlags;
 pub type VkImageUsageFlags = VkFlags;
 pub type VkImageViewCreateFlags = VkFlags;
 pub type VkImageAspectFlags = VkFlags;
+pub type VkImageCreateFlags = VkFlags;
 
 #[repr(C)]
 pub struct VkInstanceOpaque { _private: [u8; 0] }
@@ -1384,6 +1385,63 @@ pub struct VkImageSubresourceRange {
     pub layerCount: u32,
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageType.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkImageType {
+    VK_IMAGE_TYPE_1D = 0,
+    VK_IMAGE_TYPE_2D = 1,
+    VK_IMAGE_TYPE_3D = 2,
+    VK_IMAGE_TYPE_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSampleCountFlagBits.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkSampleCountFlagBits {
+    VK_SAMPLE_COUNT_1_BIT = 0x00000001,
+    VK_SAMPLE_COUNT_2_BIT = 0x00000002,
+    VK_SAMPLE_COUNT_4_BIT = 0x00000004,
+    VK_SAMPLE_COUNT_8_BIT = 0x00000008,
+    VK_SAMPLE_COUNT_16_BIT = 0x00000010,
+    VK_SAMPLE_COUNT_32_BIT = 0x00000020,
+    VK_SAMPLE_COUNT_64_BIT = 0x00000040,
+    VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageTiling.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkImageTiling {
+    VK_IMAGE_TILING_OPTIMAL = 0,
+    VK_IMAGE_TILING_LINEAR = 1,
+    VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT = 1000158000,
+    VK_IMAGE_TILING_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageCreateInfo.html
+#[repr(C)]
+pub struct VkImageCreateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub flags: VkImageCreateFlags,
+    pub imageType: VkImageType,
+    pub format: VkFormat,
+    pub extent: VkExtent3D,
+    pub mipLevels: u32,
+    pub arrayLayers: u32,
+    pub samples: VkSampleCountFlagBits,
+    pub tiling: VkImageTiling,
+    pub usage: VkImageUsageFlags,
+    pub sharingMode: VkSharingMode,
+    pub queueFamilyIndexCount: u32,
+    pub pQueueFamilyIndices: *const u32,
+    pub initialLayout: VkImageLayout,
+}
+
 #[link(name = "vulkan")]
 extern "C" {
     // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/vkCreateInstance.html
@@ -1748,6 +1806,32 @@ extern "C" {
     pub fn vkDestroyImageView(
         device: VkDevice,
         imageView: VkImageView,
+        pAllocator: *const VkAllocationCallbacks,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateImage.html
+    pub fn vkCreateImage(
+        device: VkDevice,
+        pCreateInfo: *const VkImageCreateInfo,
+        pAllocator: *const VkAllocationCallbacks,
+        pImage: *mut VkImage,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkBindImageMemory.html
+    pub fn vkBindImageMemory(
+        device: VkDevice,
+        image: VkImage,
+        memory: VkDeviceMemory,
+        memoryOffset: VkDeviceSize,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetImageMemoryRequirements.html
+    pub fn vkGetImageMemoryRequirements(
+        device: VkDevice,
+        image: VkImage,
+        pMemoryRequirements: *mut VkMemoryRequirements,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroyImage.html
+    pub fn vkDestroyImage(
+        device: VkDevice,
+        image: VkImage,
         pAllocator: *const VkAllocationCallbacks,
     );
 }

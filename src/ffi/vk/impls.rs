@@ -472,13 +472,24 @@ impl VkExtensionProperties {
     }
 }
 
-impl Default for VkComponentMapping {
-    fn default() -> Self {
+impl VkComponentMapping {
+    pub fn rgba() -> Self {
         VkComponentMapping {
             r: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_R,
             g: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_G,
             b: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_B,
             a: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_A,
+        }
+    }
+}
+
+impl Default for VkComponentMapping {
+    fn default() -> Self {
+        VkComponentMapping {
+            r: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_IDENTITY,
+            g: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_IDENTITY,
+            b: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_IDENTITY,
+            a: VkComponentSwizzle::VK_COMPONENT_SWIZZLE_IDENTITY,
         }
     }
 }

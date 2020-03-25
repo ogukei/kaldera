@@ -11,6 +11,7 @@ pub enum ErrorCode {
     FFI(std::ffi::NulError),
     SuitablePhysicalDeviceNotFound,
     SuitableBufferMemoryTypeNotFound,
+    SuitableImageMemoryTypeNotFound,
     SwapchainSurfaceFormatNotSupported,
     SuitableQueueFamilyNotFound,
     ShaderLoadIO(std::io::Error),
