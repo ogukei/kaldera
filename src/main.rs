@@ -16,7 +16,8 @@ fn main() {
         .build()
         .unwrap();
     let swapchain = Swapchain::new(&device_queues, VkExtent2D { width: 400, height: 400 }).unwrap();
-
+    let framebuffers = SwapchainFramebuffers::new(&swapchain).unwrap();
+    
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
     let vertices = vec![
         Vertex {

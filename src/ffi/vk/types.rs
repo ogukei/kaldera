@@ -41,6 +41,7 @@ pub type VkImageCreateFlags = VkFlags;
 pub type VkAttachmentDescriptionFlags = VkFlags;
 pub type VkSubpassDescriptionFlags = VkFlags;
 pub type VkRenderPassCreateFlags = VkFlags;
+pub type VkFramebufferCreateFlags = VkFlags;
 
 #[repr(C)]
 pub struct VkInstanceOpaque { _private: [u8; 0] }
@@ -1540,6 +1541,20 @@ pub enum VkDependencyFlagBits {
     VK_DEPENDENCY_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkFramebufferCreateInfo.html
+#[repr(C)]
+pub struct VkFramebufferCreateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub flags: VkFramebufferCreateFlags,
+    pub renderPass: VkRenderPass,
+    pub attachmentCount: u32,
+    pub pAttachments: *const VkImageView,
+    pub width: u32,
+    pub height: u32,
+    pub layers: u32,
+}
+
 #[link(name = "vulkan")]
 extern "C" {
     // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/vkCreateInstance.html
@@ -1943,6 +1958,19 @@ extern "C" {
     pub fn vkDestroyRenderPass(
         device: VkDevice,
         renderPass: VkRenderPass,
+        pAllocator: *const VkAllocationCallbacks,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateFramebuffer.html
+    pub fn vkCreateFramebuffer(
+        device: VkDevice,
+        pCreateInfo: *const VkFramebufferCreateInfo,
+        pAllocator: *const VkAllocationCallbacks,
+        pFramebuffer: *mut VkFramebuffer,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroyFramebuffer.html
+    pub fn vkDestroyFramebuffer(
+        device: VkDevice,
+        framebuffer: VkFramebuffer,
         pAllocator: *const VkAllocationCallbacks,
     );
 }

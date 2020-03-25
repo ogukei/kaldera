@@ -19,6 +19,8 @@ pub struct Swapchain {
     handle: VkSwapchainKHR,
     device_queues: Arc<DeviceQueues>,
     images: Vec<SwapchainImage>,
+    image_format: VkFormat,
+    image_extent: VkExtent2D,
 }
 
 impl Swapchain {
@@ -95,11 +97,32 @@ impl Swapchain {
                 handle,
                 device_queues: Arc::clone(device_queues),
                 images: images?,
+                image_format,
+                image_extent: extent,
             };
             Ok(Arc::new(swapchain))
         }
     }
 
+    #[inline]
+    pub fn images(&self) -> &Vec<SwapchainImage> {
+        &self.images
+    }
+
+    #[inline]
+    pub fn device(&self) -> &Arc<Device> {
+        self.device_queues.device()
+    }
+
+    #[inline]
+    pub fn image_format(&self) -> VkFormat {
+        self.image_format
+    }
+
+    #[inline]
+    pub fn image_extent(&self) -> VkExtent2D {
+        self.image_extent
+    }
 }
 
 impl Drop for Swapchain {
@@ -112,7 +135,7 @@ impl Drop for Swapchain {
     }
 }
 
-struct SwapchainImage {
+pub struct SwapchainImage {
     handle: VkImage,
     view: VkImageView,
     device: Arc<Device>,
@@ -147,6 +170,11 @@ impl SwapchainImage {
         };
         Ok(image)
     }
+
+    #[inline]
+    pub fn view(&self) -> VkImageView {
+        self.view
+    }
 }
 
 impl Drop for SwapchainImage {
@@ -164,6 +192,7 @@ pub struct DepthStencilImage {
     image: VkImage,
     view: VkImageView,
     memory: Arc<ImageMemory>,
+    image_format: VkFormat,
 }
 
 impl DepthStencilImage {
@@ -226,8 +255,19 @@ impl DepthStencilImage {
             image: image_handle,
             view: view_handle,
             memory: image_memory,
+            image_format: format,
         };
         Ok(Arc::new(image))
+    }
+
+    #[inline]
+    pub fn view(&self) -> VkImageView {
+        self.view
+    }
+
+    #[inline]
+    pub fn image_format(&self) -> VkFormat {
+        self.image_format
     }
 }
 
@@ -338,6 +378,11 @@ impl RenderPass {
         };
         Ok(Arc::new(render_pass))
     }
+
+    #[inline]
+    pub fn handle(&self) -> VkRenderPass {
+        self.handle
+    }
 }
 
 impl Drop for RenderPass {
@@ -346,6 +391,92 @@ impl Drop for RenderPass {
         unsafe {
             let device = &self.device;
             vkDestroyRenderPass(device.handle(), self.handle, std::ptr::null());
+        }
+    }
+}
+
+
+pub struct SwapchainFramebuffers {
+    swapchain: Arc<Swapchain>,
+    depth_stencil: Arc<DepthStencilImage>,
+    render_pass: Arc<RenderPass>,
+    framebuffers: Vec<Framebuffer>,
+}
+
+impl SwapchainFramebuffers {
+    pub fn new(swapchain: &Arc<Swapchain>) -> Result<Arc<Self>> {
+        unsafe { Self::init(swapchain) }
+    }
+
+    unsafe fn init(swapchain: &Arc<Swapchain>) -> Result<Arc<Self>> {
+        let device = swapchain.device();
+        let extent = swapchain.image_extent();
+        let width = extent.width;
+        let height = extent.height;
+        let depth_stencil = DepthStencilImage::new(device, VkExtent3D { width, height, depth: 1 })?;
+        let render_pass = RenderPass::new(device, swapchain.image_format(), depth_stencil.image_format())?;
+        let framebuffers: Result<Vec<Framebuffer>>;
+        framebuffers = swapchain.images()
+            .iter()
+            .map(|image| Framebuffer::new(device, &render_pass, image, &depth_stencil, width, height))
+            .collect();
+        let swapchain_framebuffers = SwapchainFramebuffers {
+            swapchain: Arc::clone(swapchain),
+            depth_stencil,
+            render_pass,
+            framebuffers: framebuffers?,
+        };
+        Ok(Arc::new(swapchain_framebuffers))
+    }
+}
+
+struct Framebuffer {
+    device: Arc<Device>,
+    handle: VkFramebuffer,
+}
+
+impl Framebuffer {
+    unsafe fn new(
+        device: &Arc<Device>,
+        render_pass: &Arc<RenderPass>,
+        swapchain_image: &SwapchainImage, 
+        depth_stencil: &DepthStencilImage,
+        width: u32,
+        height: u32) -> Result<Self> {
+        let attachments = vec![
+            swapchain_image.view(),
+            depth_stencil.view(),
+        ];
+        let create_info = VkFramebufferCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            renderPass: render_pass.handle(),
+            attachmentCount: attachments.len() as u32,
+            pAttachments: attachments.as_ptr(),
+            width: width,
+            height: height,
+            layers: 1,
+        };
+        let mut handle = MaybeUninit::<VkFramebuffer>::zeroed();
+        vkCreateFramebuffer(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
+            .into_result()
+            .unwrap();
+        let handle = handle.assume_init();
+        let framebuffer = Framebuffer {
+            device: Arc::clone(device),
+            handle,
+        };
+        Ok(framebuffer)
+    }
+}
+
+impl Drop for Framebuffer {
+    fn drop(&mut self) {
+        log_debug!("Drop Framebuffer");
+        unsafe {
+            let device = &self.device;
+            vkDestroyFramebuffer(device.handle(), self.handle, std::ptr::null());
         }
     }
 }
