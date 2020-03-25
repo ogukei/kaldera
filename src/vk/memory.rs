@@ -185,3 +185,64 @@ impl StagingBuffer {
         }
     }
 }
+
+pub struct ImageMemory {
+    device: Arc<Device>,
+    handle: VkDeviceMemory,
+}
+
+impl ImageMemory {
+    pub fn new(device: &Arc<Device>, image: VkImage) -> Result<Arc<Self>> {
+        unsafe {
+            // image memory requirements
+            let mut requirements = MaybeUninit::<VkMemoryRequirements>::zeroed();
+            vkGetImageMemoryRequirements(device.handle(), image, requirements.as_mut_ptr());
+            let requirements = requirements.assume_init();
+            // physical memory properties
+            let mut memory_properties = MaybeUninit::<VkPhysicalDeviceMemoryProperties>::zeroed();
+            vkGetPhysicalDeviceMemoryProperties(device.physical_device().handle(), memory_properties.as_mut_ptr());
+            let memory_properties = memory_properties.assume_init();
+            // find a memory type index that fits the properties
+            let memory_property_flags = VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags;
+            let memory_type_bits = requirements.memoryTypeBits;
+            let memory_type_index = memory_properties.memoryTypes.iter()
+                .enumerate()
+                .filter(|(i,_)| ((memory_type_bits >> i) & 1) == 1)
+                .filter(|(_,v)| (v.propertyFlags & memory_property_flags) == memory_property_flags)
+                .nth(0)
+                .map(|(i,_)| i as u32)
+                .ok_or_else(|| ErrorCode::SuitableImageMemoryTypeNotFound)
+                .unwrap();
+            // allocation
+            let alloc_info = VkMemoryAllocateInfo::new(requirements.size, memory_type_index);
+            let mut memory = MaybeUninit::<VkDeviceMemory>::zeroed();
+            vkAllocateMemory(device.handle(), &alloc_info, ptr::null(), memory.as_mut_ptr())
+                .into_result()
+                .unwrap();
+            let memory = memory.assume_init();
+            vkBindImageMemory(device.handle(), image, memory, 0)
+                .into_result()
+                .unwrap();
+            let image_memory = ImageMemory {
+                device: Arc::clone(device),
+                handle: memory,
+            };
+            Ok(Arc::new(image_memory))
+        }
+    }
+
+    #[inline]
+    pub fn handle(&self) -> VkDeviceMemory {
+        self.handle
+    }
+}
+
+impl Drop for ImageMemory {
+    fn drop(&mut self) {
+        unsafe {
+            log_debug!("Drop ImageMemory");
+            vkFreeMemory(self.device.handle(), self.handle, ptr::null());
+            self.handle = ptr::null_mut();
+        }
+    }
+}

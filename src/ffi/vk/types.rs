@@ -35,6 +35,13 @@ pub type VkShaderModuleCreateFlags = VkFlags;
 pub type VkAccessFlags = VkFlags;
 pub type VkDependencyFlags = VkFlags;
 pub type VkImageUsageFlags = VkFlags;
+pub type VkImageViewCreateFlags = VkFlags;
+pub type VkImageAspectFlags = VkFlags;
+pub type VkImageCreateFlags = VkFlags;
+pub type VkAttachmentDescriptionFlags = VkFlags;
+pub type VkSubpassDescriptionFlags = VkFlags;
+pub type VkRenderPassCreateFlags = VkFlags;
+pub type VkFramebufferCreateFlags = VkFlags;
 
 #[repr(C)]
 pub struct VkInstanceOpaque { _private: [u8; 0] }
@@ -108,6 +115,9 @@ pub type VkMemoryBarrier = *mut VkMemoryBarrierOpaque;
 #[repr(C)]
 pub struct VkImageMemoryBarrierOpaque { _private: [u8; 0] }
 pub type VkImageMemoryBarrier = *mut VkImageMemoryBarrierOpaque;
+#[repr(C)]
+pub struct VkImageOpaque { _private: [u8; 0] }
+pub type VkImage = *mut VkImageOpaque;
 
 pub const VK_MAX_PHYSICAL_DEVICE_NAME_SIZE: size_t = 256;
 pub const VK_UUID_SIZE: size_t = 16;
@@ -119,6 +129,7 @@ pub const VK_TRUE: VkBool32 = 1;
 pub const VK_FALSE: VkBool32 = 0;
 pub const VK_QUEUE_FAMILY_IGNORED: u32 = u32::max_value();
 pub const VK_MAX_EXTENSION_NAME_SIZE: size_t = 256;
+pub const VK_SUBPASS_EXTERNAL: u32 = !0u32;
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkResult.html
 #[repr(C)]
@@ -1300,6 +1311,250 @@ pub enum VkImageUsageFlagBits {
     VK_IMAGE_USAGE_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageAspectFlagBits.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkImageAspectFlagBits {
+    VK_IMAGE_ASPECT_COLOR_BIT = 0x00000001,
+    VK_IMAGE_ASPECT_DEPTH_BIT = 0x00000002,
+    VK_IMAGE_ASPECT_STENCIL_BIT = 0x00000004,
+    VK_IMAGE_ASPECT_METADATA_BIT = 0x00000008,
+    VK_IMAGE_ASPECT_PLANE_0_BIT = 0x00000010,
+    VK_IMAGE_ASPECT_PLANE_1_BIT = 0x00000020,
+    VK_IMAGE_ASPECT_PLANE_2_BIT = 0x00000040,
+    VK_IMAGE_ASPECT_MEMORY_PLANE_0_BIT_EXT = 0x00000080,
+    VK_IMAGE_ASPECT_MEMORY_PLANE_1_BIT_EXT = 0x00000100,
+    VK_IMAGE_ASPECT_MEMORY_PLANE_2_BIT_EXT = 0x00000200,
+    VK_IMAGE_ASPECT_MEMORY_PLANE_3_BIT_EXT = 0x00000400,
+    VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageViewType.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkImageViewType {
+    VK_IMAGE_VIEW_TYPE_1D = 0,
+    VK_IMAGE_VIEW_TYPE_2D = 1,
+    VK_IMAGE_VIEW_TYPE_3D = 2,
+    VK_IMAGE_VIEW_TYPE_CUBE = 3,
+    VK_IMAGE_VIEW_TYPE_1D_ARRAY = 4,
+    VK_IMAGE_VIEW_TYPE_2D_ARRAY = 5,
+    VK_IMAGE_VIEW_TYPE_CUBE_ARRAY = 6,
+    VK_IMAGE_VIEW_TYPE_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkComponentSwizzle.html
+#[repr(C)]
+pub enum VkComponentSwizzle {
+    VK_COMPONENT_SWIZZLE_IDENTITY = 0,
+    VK_COMPONENT_SWIZZLE_ZERO = 1,
+    VK_COMPONENT_SWIZZLE_ONE = 2,
+    VK_COMPONENT_SWIZZLE_R = 3,
+    VK_COMPONENT_SWIZZLE_G = 4,
+    VK_COMPONENT_SWIZZLE_B = 5,
+    VK_COMPONENT_SWIZZLE_A = 6,
+    VK_COMPONENT_SWIZZLE_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkComponentMapping.html
+#[repr(C)]
+pub struct VkComponentMapping {
+    pub r: VkComponentSwizzle,
+    pub g: VkComponentSwizzle,
+    pub b: VkComponentSwizzle,
+    pub a: VkComponentSwizzle,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageViewCreateInfo.html
+#[repr(C)]
+pub struct VkImageViewCreateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub flags: VkImageViewCreateFlags,
+    pub image: VkImage,
+    pub viewType: VkImageViewType,
+    pub format: VkFormat,
+    pub components: VkComponentMapping,
+    pub subresourceRange: VkImageSubresourceRange,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageSubresourceRange.html
+#[repr(C)]
+pub struct VkImageSubresourceRange {
+    pub aspectMask: VkImageAspectFlags,
+    pub baseMipLevel: u32,
+    pub levelCount: u32,
+    pub baseArrayLayer: u32,
+    pub layerCount: u32,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageType.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkImageType {
+    VK_IMAGE_TYPE_1D = 0,
+    VK_IMAGE_TYPE_2D = 1,
+    VK_IMAGE_TYPE_3D = 2,
+    VK_IMAGE_TYPE_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSampleCountFlagBits.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkSampleCountFlagBits {
+    VK_SAMPLE_COUNT_1_BIT = 0x00000001,
+    VK_SAMPLE_COUNT_2_BIT = 0x00000002,
+    VK_SAMPLE_COUNT_4_BIT = 0x00000004,
+    VK_SAMPLE_COUNT_8_BIT = 0x00000008,
+    VK_SAMPLE_COUNT_16_BIT = 0x00000010,
+    VK_SAMPLE_COUNT_32_BIT = 0x00000020,
+    VK_SAMPLE_COUNT_64_BIT = 0x00000040,
+    VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageTiling.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkImageTiling {
+    VK_IMAGE_TILING_OPTIMAL = 0,
+    VK_IMAGE_TILING_LINEAR = 1,
+    VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT = 1000158000,
+    VK_IMAGE_TILING_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageCreateInfo.html
+#[repr(C)]
+pub struct VkImageCreateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub flags: VkImageCreateFlags,
+    pub imageType: VkImageType,
+    pub format: VkFormat,
+    pub extent: VkExtent3D,
+    pub mipLevels: u32,
+    pub arrayLayers: u32,
+    pub samples: VkSampleCountFlagBits,
+    pub tiling: VkImageTiling,
+    pub usage: VkImageUsageFlags,
+    pub sharingMode: VkSharingMode,
+    pub queueFamilyIndexCount: u32,
+    pub pQueueFamilyIndices: *const u32,
+    pub initialLayout: VkImageLayout,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAttachmentDescription.html
+#[repr(C)]
+pub struct VkAttachmentDescription {
+    pub flags: VkAttachmentDescriptionFlags,
+    pub format: VkFormat,
+    pub samples: VkSampleCountFlagBits,
+    pub loadOp: VkAttachmentLoadOp,
+    pub storeOp: VkAttachmentStoreOp,
+    pub stencilLoadOp: VkAttachmentLoadOp,
+    pub stencilStoreOp: VkAttachmentStoreOp,
+    pub initialLayout: VkImageLayout,
+    pub finalLayout: VkImageLayout,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAttachmentLoadOp.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkAttachmentLoadOp {
+    VK_ATTACHMENT_LOAD_OP_LOAD = 0,
+    VK_ATTACHMENT_LOAD_OP_CLEAR = 1,
+    VK_ATTACHMENT_LOAD_OP_DONT_CARE = 2,
+    VK_ATTACHMENT_LOAD_OP_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAttachmentStoreOp.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkAttachmentStoreOp {
+    VK_ATTACHMENT_STORE_OP_STORE = 0,
+    VK_ATTACHMENT_STORE_OP_DONT_CARE = 1,
+    VK_ATTACHMENT_STORE_OP_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAttachmentReference.html
+#[repr(C)]
+pub struct VkAttachmentReference {
+    pub attachment: u32,
+    pub layout: VkImageLayout,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSubpassDescription.html
+#[repr(C)]
+pub struct VkSubpassDescription {
+    pub flags: VkSubpassDescriptionFlags,
+    pub pipelineBindPoint: VkPipelineBindPoint,
+    pub inputAttachmentCount: u32,
+    pub pInputAttachments: *const VkAttachmentReference,
+    pub colorAttachmentCount: u32,
+    pub pColorAttachments: *const VkAttachmentReference,
+    pub pResolveAttachments: *const VkAttachmentReference,
+    pub pDepthStencilAttachment: *const VkAttachmentReference,
+    pub preserveAttachmentCount: u32,
+    pub pPreserveAttachments: *const u32,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSubpassDependency.html
+#[repr(C)]
+pub struct VkSubpassDependency {
+    pub srcSubpass: u32,
+    pub dstSubpass: u32,
+    pub srcStageMask: VkPipelineStageFlags,
+    pub dstStageMask: VkPipelineStageFlags,
+    pub srcAccessMask: VkAccessFlags,
+    pub dstAccessMask: VkAccessFlags,
+    pub dependencyFlags: VkDependencyFlags,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRenderPassCreateInfo.html
+#[repr(C)]
+pub struct VkRenderPassCreateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub flags: VkRenderPassCreateFlags,
+    pub attachmentCount: u32,
+    pub pAttachments: *const VkAttachmentDescription,
+    pub subpassCount: u32,
+    pub pSubpasses: *const VkSubpassDescription,
+    pub dependencyCount: u32,
+    pub pDependencies: *const VkSubpassDependency,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkDependencyFlagBits.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkDependencyFlagBits {
+    VK_DEPENDENCY_BY_REGION_BIT = 0x00000001,
+    VK_DEPENDENCY_DEVICE_GROUP_BIT = 0x00000004,
+    VK_DEPENDENCY_VIEW_LOCAL_BIT = 0x00000002,
+    VK_DEPENDENCY_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkFramebufferCreateInfo.html
+#[repr(C)]
+pub struct VkFramebufferCreateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub flags: VkFramebufferCreateFlags,
+    pub renderPass: VkRenderPass,
+    pub attachmentCount: u32,
+    pub pAttachments: *const VkImageView,
+    pub width: u32,
+    pub height: u32,
+    pub layers: u32,
+}
+
 #[link(name = "vulkan")]
 extern "C" {
     // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/vkCreateInstance.html
@@ -1653,4 +1908,69 @@ extern "C" {
         pPropertyCount: *mut u32,
         pProperties: *mut VkExtensionProperties,
     ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateImageView.html
+    pub fn vkCreateImageView(
+        device: VkDevice,
+        pCreateInfo: *const VkImageViewCreateInfo,
+        pAllocator: *const VkAllocationCallbacks,
+        pView: *mut VkImageView,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroyImageView.html
+    pub fn vkDestroyImageView(
+        device: VkDevice,
+        imageView: VkImageView,
+        pAllocator: *const VkAllocationCallbacks,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateImage.html
+    pub fn vkCreateImage(
+        device: VkDevice,
+        pCreateInfo: *const VkImageCreateInfo,
+        pAllocator: *const VkAllocationCallbacks,
+        pImage: *mut VkImage,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkBindImageMemory.html
+    pub fn vkBindImageMemory(
+        device: VkDevice,
+        image: VkImage,
+        memory: VkDeviceMemory,
+        memoryOffset: VkDeviceSize,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetImageMemoryRequirements.html
+    pub fn vkGetImageMemoryRequirements(
+        device: VkDevice,
+        image: VkImage,
+        pMemoryRequirements: *mut VkMemoryRequirements,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroyImage.html
+    pub fn vkDestroyImage(
+        device: VkDevice,
+        image: VkImage,
+        pAllocator: *const VkAllocationCallbacks,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateRenderPass.html
+    pub fn vkCreateRenderPass(
+        device: VkDevice,
+        pCreateInfo: *const VkRenderPassCreateInfo,
+        pAllocator: *const VkAllocationCallbacks,
+        pRenderPass: *mut VkRenderPass,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroyRenderPass.html
+    pub fn vkDestroyRenderPass(
+        device: VkDevice,
+        renderPass: VkRenderPass,
+        pAllocator: *const VkAllocationCallbacks,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateFramebuffer.html
+    pub fn vkCreateFramebuffer(
+        device: VkDevice,
+        pCreateInfo: *const VkFramebufferCreateInfo,
+        pAllocator: *const VkAllocationCallbacks,
+        pFramebuffer: *mut VkFramebuffer,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroyFramebuffer.html
+    pub fn vkDestroyFramebuffer(
+        device: VkDevice,
+        framebuffer: VkFramebuffer,
+        pAllocator: *const VkAllocationCallbacks,
+    );
 }
