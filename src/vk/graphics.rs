@@ -5,6 +5,7 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder};
 use super::memory::{StagingBuffer, StagingBufferUsage};
+use super::swapchain::{SwapchainFramebuffers};
 
 use std::ptr;
 use std::mem;
@@ -54,5 +55,47 @@ impl RenderStagingBuffer {
             index_buffer,
         };
         Arc::new(buffer)
+    }
+}
+
+struct PipelineLayout {
+    device: Arc<Device>,
+    handle: VkPipelineLayout,
+}
+
+impl PipelineLayout {
+    unsafe fn new(device: &Arc<Device>) -> Result<Arc<Self>> {
+        let mut handle = MaybeUninit::<VkPipelineLayout>::zeroed();
+        {
+            let create_info = VkPipelineLayoutCreateInfo::new(0, ptr::null());
+            vkCreatePipelineLayout(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let handle = handle.assume_init();
+        let layout = PipelineLayout {
+            device: Arc::clone(device),
+            handle,
+        };
+        Ok(Arc::new(layout))
+    }
+}
+
+impl Drop for PipelineLayout {
+    fn drop(&mut self) {
+        log_debug!("Drop PipelineLayout");
+        unsafe {
+            vkDestroyPipelineLayout(self.device.handle(), self.handle, ptr::null());
+        }
+    }
+}
+
+struct GraphicsPipeline {
+
+}
+
+impl GraphicsPipeline {
+    fn new(framebuffers: &Arc<SwapchainFramebuffers>) -> Result<Arc<Self>> {
+
     }
 }
