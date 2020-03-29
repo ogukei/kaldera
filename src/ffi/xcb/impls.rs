@@ -75,6 +75,7 @@ impl XcbWindow {
         let y: i16 = 0;
         let width: u16 = 400;
         let height: u16 = 400;
+        value_list[1] = xcb_event_mask_t::default();
         xcb_create_window(conn,
             XCB_COPY_FROM_PARENT as u8,
             window,
@@ -131,5 +132,99 @@ impl XcbWindow {
 
     pub fn handle(&self) -> xcb_window_t {
         self.handle
+    }
+
+    pub fn events(&self) -> Option<Vec<XcbEvent>> {
+        unsafe {
+            let connection = self.connection();
+            let event = xcb_poll_for_event(connection.handle());
+            if event == std::ptr::null_mut() {
+                // no events in most cases. 
+                // returns immediately with no allocations
+                return None
+            }
+            let event = XcbEvent::new(event, connection);
+            let mut events = vec![event];
+            loop {
+                let event = xcb_poll_for_event(connection.handle());
+                if event == std::ptr::null_mut() {
+                    return Some(events)
+                }
+                let event = XcbEvent::new(event, connection);
+                events.push(event);
+            }
+        }
+    }
+}
+
+pub struct XcbEvent<'a> {
+    connection: &'a Arc<XcbConnection>,
+    handle: *mut xcb_generic_event_t,
+    event_type: Option<XcbEventType<'a>>,
+}
+
+impl<'a> XcbEvent<'a> {
+    fn new(handle: *mut xcb_generic_event_t, connection: &'a Arc<XcbConnection>) -> Self {
+        unsafe {
+            let event_type = handle.as_ref::<'a>()
+                .map(|v| XcbEventType::new(v))
+                .flatten();
+            let event = XcbEvent {
+                connection,
+                handle,
+                event_type,
+            };
+            event
+        }
+    }
+
+    pub fn event_type(&self) -> Option<&XcbEventType> {
+        self.event_type.as_ref()
+    }
+}
+
+impl<'a> Drop for XcbEvent<'a> {
+    fn drop(&mut self) {
+        unsafe {
+            libc::free(self.handle as *mut c_void);
+        }
+    }
+}
+
+pub enum XcbEventType<'a> {
+    KeyPress(&'a xcb_key_press_event_t),
+    KeyRelease(&'a xcb_key_press_event_t),
+    ButtonPress(&'a xcb_button_press_event_t),
+    ButtonRelease(&'a xcb_button_press_event_t),
+    MotionNotify(&'a xcb_motion_notify_event_t),
+    ConfigureNotify(&'a xcb_configure_notify_event_t),
+}
+
+impl<'a> XcbEventType<'a> {
+    fn new(handle: &'a xcb_generic_event_t) -> Option<Self> {
+        unsafe {
+            let event_type = match handle.response_type & 0x7f {
+                XCB_KEY_PRESS => Self::KeyPress(std::mem::transmute(handle)),
+                XCB_KEY_RELEASE => Self::KeyRelease(std::mem::transmute(handle)),
+                XCB_BUTTON_PRESS => Self::ButtonPress(std::mem::transmute(handle)),
+                XCB_BUTTON_RELEASE => Self::ButtonRelease(std::mem::transmute(handle)),
+                XCB_MOTION_NOTIFY => Self::MotionNotify(std::mem::transmute(handle)),
+                XCB_CONFIGURE_NOTIFY => Self::ConfigureNotify(std::mem::transmute(handle)),
+                _ => return None,
+            };
+            Some(event_type)
+        }
+    }
+}
+
+impl xcb_event_mask_t {
+    fn default() -> u32 {
+        Self::XCB_EVENT_MASK_EXPOSURE as u32
+            | Self::XCB_EVENT_MASK_KEY_PRESS as u32
+            | Self::XCB_EVENT_MASK_KEY_RELEASE as u32
+            | Self::XCB_EVENT_MASK_BUTTON_PRESS as u32
+            | Self::XCB_EVENT_MASK_BUTTON_RELEASE as u32
+            | Self::XCB_EVENT_MASK_POINTER_MOTION as u32
+            | Self::XCB_EVENT_MASK_STRUCTURE_NOTIFY as u32
     }
 }

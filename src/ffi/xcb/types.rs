@@ -9,8 +9,18 @@ pub type xcb_window_t = u32;
 pub type xcb_colormap_t = u32;
 pub type xcb_visualid_t = u32;
 pub type xcb_atom_t = u32;
+pub type xcb_timestamp_t = u32;
+pub type xcb_button_t = u8;
+pub type xcb_keycode_t = u8;
 
 pub const XCB_COPY_FROM_PARENT: u64 = 0;
+// @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
+pub const XCB_KEY_PRESS: u8 = 2;
+pub const XCB_KEY_RELEASE: u8 = 3;
+pub const XCB_BUTTON_PRESS: u8 = 4;
+pub const XCB_BUTTON_RELEASE: u8 = 5;
+pub const XCB_MOTION_NOTIFY: u8 = 6;
+pub const XCB_CONFIGURE_NOTIFY: u8 = 22;
 
 #[repr(C)]
 pub struct xcb_connection_t { _private: [u8; 0] }
@@ -161,6 +171,122 @@ pub enum xcb_atom_enum_t {
     XCB_ATOM_WM_TRANSIENT_FOR = 68
 }
 
+// @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
+#[repr(C)]
+pub enum xcb_event_mask_t {
+    XCB_EVENT_MASK_NO_EVENT = 0,
+    XCB_EVENT_MASK_KEY_PRESS = 1,
+    XCB_EVENT_MASK_KEY_RELEASE = 2,
+    XCB_EVENT_MASK_BUTTON_PRESS = 4,
+    XCB_EVENT_MASK_BUTTON_RELEASE = 8,
+    XCB_EVENT_MASK_ENTER_WINDOW = 16,
+    XCB_EVENT_MASK_LEAVE_WINDOW = 32,
+    XCB_EVENT_MASK_POINTER_MOTION = 64,
+    XCB_EVENT_MASK_POINTER_MOTION_HINT = 128,
+    XCB_EVENT_MASK_BUTTON_1_MOTION = 256,
+    XCB_EVENT_MASK_BUTTON_2_MOTION = 512,
+    XCB_EVENT_MASK_BUTTON_3_MOTION = 1024,
+    XCB_EVENT_MASK_BUTTON_4_MOTION = 2048,
+    XCB_EVENT_MASK_BUTTON_5_MOTION = 4096,
+    XCB_EVENT_MASK_BUTTON_MOTION = 8192,
+    XCB_EVENT_MASK_KEYMAP_STATE = 16384,
+    XCB_EVENT_MASK_EXPOSURE = 32768,
+    XCB_EVENT_MASK_VISIBILITY_CHANGE = 65536,
+    XCB_EVENT_MASK_STRUCTURE_NOTIFY = 131072,
+    XCB_EVENT_MASK_RESIZE_REDIRECT = 262144,
+    XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY = 524288,
+    XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT = 1048576,
+    XCB_EVENT_MASK_FOCUS_CHANGE = 2097152,
+    XCB_EVENT_MASK_PROPERTY_CHANGE = 4194304,
+    XCB_EVENT_MASK_COLOR_MAP_CHANGE = 8388608,
+    XCB_EVENT_MASK_OWNER_GRAB_BUTTON = 16777216
+}
+
+// @see https://github.com/freedesktop/xcb-libxcb/blob/ee9dfc9a7658e7fe75d27483bb5ed1ba4d1e2c86/src/xcb.h#L137
+#[repr(C)]
+pub struct xcb_generic_event_t {
+    pub response_type: u8,
+    pub pad0: u8,
+    pub sequence: u16,
+    pub pad: [u32; 7],
+    pub full_sequence: u32,
+}
+
+// @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
+#[repr(C)]
+pub struct xcb_button_press_event_t {
+    pub response_type: u8,
+    pub detail: xcb_button_t,
+    pub sequence: u16,
+    pub time: xcb_timestamp_t,
+    pub root: xcb_window_t,
+    pub event: xcb_window_t,
+    pub child: xcb_window_t,
+    pub root_x: i16,
+    pub root_y: i16,
+    pub event_x: i16,
+    pub event_y: i16,
+    pub state: u16,
+    pub same_screen: u8,
+    pub pad0: u8,
+}
+
+// @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
+#[repr(C)]
+pub struct xcb_motion_notify_event_t {
+    pub response_type: u8,
+    pub detail: u8,
+    pub sequence: u16,
+    pub time: xcb_timestamp_t,
+    pub root: xcb_window_t,
+    pub event: xcb_window_t,
+    pub child: xcb_window_t,
+    pub root_x: i16,
+    pub root_y: i16,
+    pub event_x: i16,
+    pub event_y: i16,
+    pub state: u16,
+    pub same_screen: u8,
+    pub pad0: u8,
+}
+
+// @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
+#[repr(C)]
+pub struct xcb_key_press_event_t {
+    pub response_type: u8,
+    pub detail: xcb_keycode_t,
+    pub sequence: u16,
+    pub time: xcb_timestamp_t,
+    pub root: xcb_window_t,
+    pub event: xcb_window_t,
+    pub child: xcb_window_t,
+    pub root_x: i16,
+    pub root_y: i16,
+    pub event_x: i16,
+    pub event_y: i16,
+    pub state: u16,
+    pub same_screen: u8,
+    pub pad0: u8,
+}
+
+// @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
+#[repr(C)]
+pub struct xcb_configure_notify_event_t {
+    pub response_type: u8,
+    pub pad0: u8,
+    pub sequence: u16,
+    pub event: xcb_window_t,
+    pub window: xcb_window_t,
+    pub above_sibling: xcb_window_t,
+    pub x: i16,
+    pub y: i16,
+    pub width: u16,
+    pub height: u16,
+    pub border_width: u16,
+    pub override_redirect: u8,
+    pub pad1: u8,
+}
+
 #[link(name = "xcb")]
 extern "C" {
     // @see https://github.com/freedesktop/xcb-libxcb/blob/ee9dfc9a7658e7fe75d27483bb5ed1ba4d1e2c86/src/xcb.h#L567
@@ -224,4 +350,8 @@ extern "C" {
         data_len: u32,
         data: *const c_void,
     ) -> xcb_void_cookie_t;
+    // @see https://github.com/freedesktop/xcb-libxcb/blob/ee9dfc9a7658e7fe75d27483bb5ed1ba4d1e2c86/src/xcb.h#L309
+    pub fn xcb_poll_for_event(
+        c: *mut xcb_connection_t,
+    ) -> *mut xcb_generic_event_t;
 }
