@@ -66,13 +66,17 @@ impl RenderStagingBuffer {
     }
 }
 
-struct PipelineLayout {
+pub struct PipelineLayout {
     device: Arc<Device>,
     handle: VkPipelineLayout,
 }
 
 impl PipelineLayout {
-    unsafe fn new(device: &Arc<Device>) -> Result<Arc<Self>> {
+    pub fn new(device: &Arc<Device>) -> Result<Arc<Self>> {
+        unsafe { Self::init(device) }
+    }
+
+    unsafe fn init(device: &Arc<Device>) -> Result<Arc<Self>> {
         let mut handle = MaybeUninit::<VkPipelineLayout>::zeroed();
         {
             let create_info = VkPipelineLayoutCreateInfo::new(0, ptr::null());
@@ -103,7 +107,7 @@ impl Drop for PipelineLayout {
     }
 }
 
-struct GraphicsPipeline {
+pub struct GraphicsPipeline {
     framebuffers: Arc<SwapchainFramebuffers>,
     layout: Arc<PipelineLayout>,
     cache: VkPipelineCache,
@@ -111,7 +115,11 @@ struct GraphicsPipeline {
 }
 
 impl GraphicsPipeline {
-    unsafe fn new(framebuffers: &Arc<SwapchainFramebuffers>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
+    pub fn new(framebuffers: &Arc<SwapchainFramebuffers>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
+        unsafe { Self::init(framebuffers, layout) }
+    }
+
+    unsafe fn init(framebuffers: &Arc<SwapchainFramebuffers>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
         let device = framebuffers.device();
         let render_pass = framebuffers.render_pass();
         // input assembly

@@ -17,6 +17,8 @@ fn main() {
         .unwrap();
     let swapchain = Swapchain::new(&device_queues, VkExtent2D { width: 400, height: 400 }).unwrap();
     let framebuffers = SwapchainFramebuffers::new(&swapchain).unwrap();
+    let layout = PipelineLayout::new(device_queues.device()).unwrap();
+    let pipeline = GraphicsPipeline::new(&framebuffers, &layout).unwrap();
     
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
     let vertices = vec![
