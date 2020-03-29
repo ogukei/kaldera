@@ -1,10 +1,16 @@
 
 
 macro_rules! log_debug {
-    ($e:expr) => {
-        println!("Drop {:?}", $e)
+    () => { println!() };
+    ($($arg:tt)*) => { 
+        let s: &'static str = file!();
+        let filename = s.split('/').last().unwrap_or("");
+        let label = format!("{}:{}", filename, line!());
+        println!("[{}] {}", label, format!($($arg)*)) 
     };
 }
+
+const DEFAULT_TIMEOUT: u64 = 10000000000; // 10sec
 
 mod error;
 mod instance;

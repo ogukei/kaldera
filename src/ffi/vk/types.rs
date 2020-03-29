@@ -54,6 +54,7 @@ pub type VkPipelineDepthStencilStateCreateFlags = VkFlags;
 pub type VkPipelineColorBlendStateCreateFlags = VkFlags;
 pub type VkColorComponentFlags = VkFlags;
 pub type VkPipelineDynamicStateCreateFlags = VkFlags;
+pub type VkSemaphoreCreateFlags = VkFlags;
 
 #[repr(C)]
 pub struct VkInstanceOpaque { _private: [u8; 0] }
@@ -2057,6 +2058,14 @@ pub enum VkIndexType {
     VK_INDEX_TYPE_MAX_ENUM = 0x7FFFFFFF
 }
 
+// #see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSemaphoreCreateInfo.html
+#[repr(C)]
+pub struct VkSemaphoreCreateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub flags: VkSemaphoreCreateFlags,
+}
+
 #[link(name = "vulkan")]
 extern "C" {
     // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/vkCreateInstance.html
@@ -2531,5 +2540,18 @@ extern "C" {
     // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdEndRenderPass.html
     pub fn vkCmdEndRenderPass(
         commandBuffer: VkCommandBuffer,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateSemaphore.html
+    pub fn vkCreateSemaphore(
+        device: VkDevice,
+        pCreateInfo: *const VkSemaphoreCreateInfo,
+        pAllocator: *const VkAllocationCallbacks,
+        pSemaphore: *mut VkSemaphore,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroySemaphore.html
+    pub fn vkDestroySemaphore(
+        device: VkDevice,
+        semaphore: VkSemaphore,
+        pAllocator: *const VkAllocationCallbacks,
     );
 }

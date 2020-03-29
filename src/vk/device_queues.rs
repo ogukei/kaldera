@@ -51,6 +51,7 @@ impl DeviceQueuesBuilder {
         let priority: c_float = 0.0;
         if (graphics_family as *const QueueFamily) == (present_family as *const QueueFamily) {
             // unique family
+            log_debug!("Unique family");
             let family = graphics_family;
             let family_index = family.index();
             let queue_create_info = VkDeviceQueueCreateInfo::new(family_index, 1, &priority);

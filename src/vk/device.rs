@@ -160,9 +160,45 @@ impl CommandBuffer {
                 .unwrap();
             let submit_info = VkSubmitInfo::with_command_buffer_wait(1, &command_buffer, &wait_mask);
             vkQueueSubmit(queue.handle(), 1, &submit_info, fence);
-            vkWaitForFences(device.handle(), 1, &fence, VK_TRUE, u64::max_value())
+            vkWaitForFences(device.handle(), 1, &fence, VK_TRUE, crate::vk::DEFAULT_TIMEOUT)
                 .into_result()
                 .unwrap();
+        }
+    }
+
+    pub fn wait_and_reset(&self) {
+        unsafe {
+            let queue = self.command_pool.queue();
+            let device = queue.device();
+            let fence = self.fence;
+            vkWaitForFences(device.handle(), 1, &fence, VK_TRUE, crate::vk::DEFAULT_TIMEOUT)
+                .into_result()
+                .unwrap();
+            vkResetFences(device.handle(), 1, &fence)
+                .into_result()
+                .unwrap();
+        }
+    }
+
+    pub fn submit(&self, wait_mask: VkPipelineStageFlags, wait_semaphore: VkSemaphore, signal_semaphore: VkSemaphore) -> Result<()> {
+        unsafe {
+            let queue = self.command_pool.queue();
+            let fence = self.fence;
+            let command_buffer = self.handle;
+            let submit_info = VkSubmitInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                pNext: ptr::null(),
+                waitSemaphoreCount: 1,
+                pWaitSemaphores: &wait_semaphore,
+                pWaitDstStageMask: &wait_mask,
+                commandBufferCount: 1,
+                pCommandBuffers: &command_buffer,
+                signalSemaphoreCount: 1,
+                pSignalSemaphores: &signal_semaphore,
+            };
+            vkQueueSubmit(queue.handle(), 1, &submit_info, fence)
+                .into_result()?;
+            Ok(())
         }
     }
 }

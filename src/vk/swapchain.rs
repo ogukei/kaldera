@@ -90,7 +90,8 @@ impl Swapchain {
                     .into_result()
                     .unwrap();
                 images = image_handles.into_iter()
-                    .map(|v| SwapchainImage::new(v, device, image_format))
+                    .enumerate()
+                    .map(|(i, v)| SwapchainImage::new(i, v, device, image_format))
                     .collect();
             }
             let swapchain = Swapchain {
@@ -101,6 +102,43 @@ impl Swapchain {
                 image_extent: extent,
             };
             Ok(Arc::new(swapchain))
+        }
+    }
+
+    pub fn acquire_next_image(&self, semaphore: VkSemaphore) -> Result<&SwapchainImage> {
+        unsafe {
+            let mut image_index = MaybeUninit::<u32>::zeroed();
+            vkAcquireNextImageKHR(self.device_queues.device().handle(), self.handle, crate::vk::DEFAULT_TIMEOUT, semaphore, ptr::null_mut(), image_index.as_mut_ptr())
+                .into_result()?;
+            let image_index = image_index.assume_init() as usize;
+            log_debug!("Image {}", image_index);
+            let image = self.images().get(image_index)
+                .ok_or_else(|| ErrorCode::SwapchainImageNotFound)?;
+            Ok(image)
+        }
+    }
+
+    pub fn queue_present<'a>(&'a self, image: &'a SwapchainImage, semaphore: VkSemaphore) -> Result<()> {
+        let handle = self.handle;
+        let image_index = image.index() as u32;
+        let present_info = VkPresentInfoKHR {
+            sType: VkStructureTypeExt::VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+            pNext: ptr::null(),
+            waitSemaphoreCount: 1,
+            pWaitSemaphores: &semaphore,
+            swapchainCount: 1,
+            pSwapchains: &handle,
+            pImageIndices: &image_index,
+            pResults: ptr::null_mut(),
+        };
+        unsafe {
+            let result = vkQueuePresentKHR(self.device_queues.present_queue().handle(), &present_info);
+            let is_optimal = result == VkResult::VK_SUCCESS || result == VkResult::VK_SUBOPTIMAL_KHR;
+            if is_optimal {
+                Ok(())
+            } else {
+                Err(ErrorCode::VkResult(result).into())
+            }
         }
     }
 
@@ -136,13 +174,14 @@ impl Drop for Swapchain {
 }
 
 pub struct SwapchainImage {
+    index: usize,
     handle: VkImage,
     view: VkImageView,
     device: Arc<Device>,
 }
 
 impl SwapchainImage {
-    unsafe fn new(handle: VkImage, device: &Arc<Device>, format: VkFormat) -> Result<Self> {
+    unsafe fn new(index: usize, handle: VkImage, device: &Arc<Device>, format: VkFormat) -> Result<Self> {
         let create_info = VkImageViewCreateInfo {
             sType: VkStructureType::VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
             pNext: std::ptr::null(),
@@ -164,6 +203,7 @@ impl SwapchainImage {
             .into_result()?;
         let view_handle = view_handle.assume_init();
         let image = SwapchainImage {
+            index,
             handle,
             view: view_handle,
             device: Arc::clone(device),
@@ -174,6 +214,11 @@ impl SwapchainImage {
     #[inline]
     pub fn view(&self) -> VkImageView {
         self.view
+    }
+
+    #[inline]
+    pub fn index(&self) -> usize {
+        self.index
     }
 }
 
@@ -447,6 +492,11 @@ impl SwapchainFramebuffers {
     #[inline]
     pub fn framebuffers(&self) -> &Vec<Framebuffer> {
         &self.framebuffers
+    }
+
+    #[inline]
+    pub fn swapchain(&self) -> &Arc<Swapchain> {
+        &self.swapchain
     }
 }
 

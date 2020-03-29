@@ -13,6 +13,8 @@ pub enum ErrorCode {
     SuitableBufferMemoryTypeNotFound,
     SuitableImageMemoryTypeNotFound,
     SwapchainSurfaceFormatNotSupported,
+    SwapchainImageNotFound,
+    RenderFrameNotFound,
     SuitableQueueFamilyNotFound,
     ShaderLoadIO(std::io::Error),
     ShaderLoadUnaligned,
