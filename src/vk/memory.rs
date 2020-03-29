@@ -184,6 +184,16 @@ impl StagingBuffer {
                 VkPipelineStageFlagBits::VK_PIPELINE_STAGE_TRANSFER_BIT as VkPipelineStageFlags);
         }
     }
+
+    #[inline]
+    pub fn host_buffer_memory(&self) -> &Arc<BufferMemory> {
+        &self.host_buffer_memory
+    }
+
+    #[inline]
+    pub fn device_buffer_memory(&self) -> &Arc<BufferMemory> {
+        &self.device_buffer_memory
+    }
 }
 
 pub struct ImageMemory {

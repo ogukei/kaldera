@@ -383,6 +383,11 @@ impl RenderPass {
     pub fn handle(&self) -> VkRenderPass {
         self.handle
     }
+
+    #[inline]
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
 }
 
 impl Drop for RenderPass {
@@ -438,9 +443,14 @@ impl SwapchainFramebuffers {
     pub fn render_pass(&self) -> &Arc<RenderPass> {
         &self.render_pass
     }
+
+    #[inline]
+    pub fn framebuffers(&self) -> &Vec<Framebuffer> {
+        &self.framebuffers
+    }
 }
 
-struct Framebuffer {
+pub struct Framebuffer {
     device: Arc<Device>,
     handle: VkFramebuffer,
 }
@@ -478,6 +488,11 @@ impl Framebuffer {
             handle,
         };
         Ok(framebuffer)
+    }
+
+    #[inline]
+    pub fn handle(&self) -> VkFramebuffer {
+        self.handle
     }
 }
 

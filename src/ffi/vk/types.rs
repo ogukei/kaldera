@@ -1693,6 +1693,7 @@ pub struct VkViewport {
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRect2D.html
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct VkRect2D {
     pub offset: VkOffset2D,
     pub extent: VkExtent2D,
@@ -1700,6 +1701,7 @@ pub struct VkRect2D {
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkOffset2D.html
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct VkOffset2D {
     pub x: i32,
     pub y: i32,
@@ -2012,6 +2014,47 @@ pub enum VkColorComponentFlagBits {
     VK_COLOR_COMPONENT_B_BIT = 0x00000004,
     VK_COLOR_COMPONENT_A_BIT = 0x00000008,
     VK_COLOR_COMPONENT_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRenderPassBeginInfo.html
+#[repr(C)]
+pub struct VkRenderPassBeginInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub renderPass: VkRenderPass,
+    pub framebuffer: VkFramebuffer,
+    pub renderArea: VkRect2D,
+    pub clearValueCount: u32,
+    pub pClearValues: *const VkClearValue,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkClearValue.html
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkClearColorValue.html
+#[repr(C)]
+pub struct VkClearValue {
+    pub values: [c_float; 4],
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSubpassContents.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkSubpassContents {
+    VK_SUBPASS_CONTENTS_INLINE = 0,
+    VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = 1,
+    VK_SUBPASS_CONTENTS_MAX_ENUM = 0x7FFFFFFF
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkIndexType.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
+pub enum VkIndexType {
+    VK_INDEX_TYPE_UINT16 = 0,
+    VK_INDEX_TYPE_UINT32 = 1,
+    VK_INDEX_TYPE_NONE_KHR = 1000165000,
+    VK_INDEX_TYPE_UINT8_EXT = 1000265000,
+    VK_INDEX_TYPE_MAX_ENUM = 0x7FFFFFFF
 }
 
 #[link(name = "vulkan")]
@@ -2441,4 +2484,52 @@ extern "C" {
         pAllocator: *const VkAllocationCallbacks,
         pPipelines: *mut VkPipeline,
     ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdBeginRenderPass.html
+    pub fn vkCmdBeginRenderPass(
+        commandBuffer: VkCommandBuffer,
+        pRenderPassBegin: *const VkRenderPassBeginInfo,
+        contents: VkSubpassContents,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdSetViewport.html
+    pub fn vkCmdSetViewport(
+        commandBuffer: VkCommandBuffer,
+        firstViewport: u32,
+        viewportCount: u32,
+        pViewports: *const VkViewport,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdSetScissor.html
+    pub fn vkCmdSetScissor(
+        commandBuffer: VkCommandBuffer,
+        firstScissor: u32,
+        scissorCount: u32,
+        pScissors: *const VkRect2D,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdBindVertexBuffers.html
+    pub fn vkCmdBindVertexBuffers(
+        commandBuffer: VkCommandBuffer,
+        firstBinding: u32,
+        bindingCount: u32,
+        pBuffers: *const VkBuffer,
+        pOffsets: *const VkDeviceSize,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdBindIndexBuffer.html
+    pub fn vkCmdBindIndexBuffer(
+        commandBuffer: VkCommandBuffer,
+        buffer: VkBuffer,
+        offset: VkDeviceSize,
+        indexType: VkIndexType,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdDrawIndexed.html
+    pub fn vkCmdDrawIndexed(
+        commandBuffer: VkCommandBuffer,
+        indexCount: u32,
+        instanceCount: u32,
+        firstIndex: u32,
+        vertexOffset: i32,
+        firstInstance: u32,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdEndRenderPass.html
+    pub fn vkCmdEndRenderPass(
+        commandBuffer: VkCommandBuffer,
+    );
 }
