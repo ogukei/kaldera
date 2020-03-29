@@ -41,7 +41,38 @@ fn main() {
     let render = GraphicsRender::new(&framebuffers, &pipeline, &staging_buffer, &command_pool).unwrap();
     render.draw().unwrap();   
     window.flush();
-    render.draw().unwrap();   
-    window.flush();
-    std::thread::sleep(std::time::Duration::from_secs(3));
+
+    for i in 0..100 {
+        println!("frame {}", i);
+        render.draw().unwrap();   
+        window.flush();
+        let events = window.events();
+        if let Some(events) = events {
+            let event_types: Vec<&XcbEventType> = events.iter()
+                .filter_map(|v| v.event_type())
+                .collect();
+            for event_type in event_types {
+                match event_type {
+                    XcbEventType::KeyPress(event) => {
+                        println!("KeyPress {}", event.detail);
+                    },
+                    XcbEventType::KeyRelease(event) => {
+                        println!("KeyRelease {}", event.detail);
+                    },
+                    XcbEventType::ButtonPress(event) => {
+                        println!("ButtonPress {} {}", event.event_x, event.event_y);
+                    },
+                    XcbEventType::ButtonRelease(event) => {
+                        println!("ButtonRelease {} {}", event.event_x, event.event_y);
+                    },
+                    XcbEventType::MotionNotify(event) => {
+                        println!("MotionNotify {} {}", event.event_x, event.event_y);
+                    }
+                }
+            }
+        }
+
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
 }
