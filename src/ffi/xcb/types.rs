@@ -20,6 +20,7 @@ pub const XCB_KEY_RELEASE: u8 = 3;
 pub const XCB_BUTTON_PRESS: u8 = 4;
 pub const XCB_BUTTON_RELEASE: u8 = 5;
 pub const XCB_MOTION_NOTIFY: u8 = 6;
+pub const XCB_CONFIGURE_NOTIFY: u8 = 22;
 
 #[repr(C)]
 pub struct xcb_connection_t { _private: [u8; 0] }
@@ -266,6 +267,24 @@ pub struct xcb_key_press_event_t {
     pub state: u16,
     pub same_screen: u8,
     pub pad0: u8,
+}
+
+// @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
+#[repr(C)]
+pub struct xcb_configure_notify_event_t {
+    pub response_type: u8,
+    pub pad0: u8,
+    pub sequence: u16,
+    pub event: xcb_window_t,
+    pub window: xcb_window_t,
+    pub above_sibling: xcb_window_t,
+    pub x: i16,
+    pub y: i16,
+    pub width: u16,
+    pub height: u16,
+    pub border_width: u16,
+    pub override_redirect: u8,
+    pub pad1: u8,
 }
 
 #[link(name = "xcb")]

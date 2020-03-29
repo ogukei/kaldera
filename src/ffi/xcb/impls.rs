@@ -197,6 +197,7 @@ pub enum XcbEventType<'a> {
     ButtonPress(&'a xcb_button_press_event_t),
     ButtonRelease(&'a xcb_button_press_event_t),
     MotionNotify(&'a xcb_motion_notify_event_t),
+    ConfigureNotify(&'a xcb_configure_notify_event_t),
 }
 
 impl<'a> XcbEventType<'a> {
@@ -208,6 +209,7 @@ impl<'a> XcbEventType<'a> {
                 XCB_BUTTON_PRESS => Self::ButtonPress(std::mem::transmute(handle)),
                 XCB_BUTTON_RELEASE => Self::ButtonRelease(std::mem::transmute(handle)),
                 XCB_MOTION_NOTIFY => Self::MotionNotify(std::mem::transmute(handle)),
+                XCB_CONFIGURE_NOTIFY => Self::ConfigureNotify(std::mem::transmute(handle)),
                 _ => return None,
             };
             Some(event_type)

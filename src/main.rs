@@ -67,6 +67,9 @@ fn main() {
                     },
                     XcbEventType::MotionNotify(event) => {
                         println!("MotionNotify {} {}", event.event_x, event.event_y);
+                    },
+                    XcbEventType::ConfigureNotify(event) => {
+                        println!("ConfigureNotify {} {}", event.width, event.height);
                     }
                 }
             }
