@@ -493,3 +493,26 @@ impl Default for VkComponentMapping {
         }
     }
 }
+
+impl VkColorComponentFlagBits {
+    pub fn rgba() -> VkColorComponentFlags {
+        Self::VK_COLOR_COMPONENT_R_BIT as VkColorComponentFlags
+            | Self::VK_COLOR_COMPONENT_G_BIT as VkColorComponentFlags
+            | Self::VK_COLOR_COMPONENT_B_BIT as VkColorComponentFlags
+            | Self::VK_COLOR_COMPONENT_A_BIT as VkColorComponentFlags
+    }
+}
+
+impl Default for VkStencilOpState {
+    fn default() -> Self {
+        VkStencilOpState {
+            failOp: VkStencilOp::VK_STENCIL_OP_KEEP,
+            passOp: VkStencilOp::VK_STENCIL_OP_KEEP,
+            depthFailOp: VkStencilOp::VK_STENCIL_OP_KEEP,
+            compareOp: VkCompareOp::VK_COMPARE_OP_ALWAYS,
+            compareMask: 0,
+            writeMask: 0,
+            reference: 0,
+        }
+    }
+}

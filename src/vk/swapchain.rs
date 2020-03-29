@@ -283,7 +283,7 @@ impl Drop for DepthStencilImage {
     }
 }
 
-struct RenderPass {
+pub struct RenderPass {
     device: Arc<Device>,
     handle: VkRenderPass,
 }
@@ -427,6 +427,16 @@ impl SwapchainFramebuffers {
             framebuffers: framebuffers?,
         };
         Ok(Arc::new(swapchain_framebuffers))
+    }
+
+    #[inline]
+    pub fn device(&self) -> &Arc<Device> {
+        self.swapchain.device()
+    }
+
+    #[inline]
+    pub fn render_pass(&self) -> &Arc<RenderPass> {
+        &self.render_pass
     }
 }
 

@@ -13,8 +13,8 @@ mod device;
 mod device_queues;
 mod memory;
 
-mod swapchain;
 mod graphics;
+mod swapchain;
 
 pub use error::*;
 pub use instance::*;
