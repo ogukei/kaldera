@@ -21,16 +21,16 @@ fn main() {
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
     let vertices = vec![
         Vertex {
-            coordinate: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
-            color: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+            coordinate: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+            color: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
         },
         Vertex {
-            coordinate: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
-            color: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+            coordinate: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+            color: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
         },
         Vertex {
-            coordinate: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
-            color: Vec4 { x: 0.0, y: 0.0, z: 0.0, w: 0.0 },
+            coordinate: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
+            color: Vec3 { x: 0.0, y: 0.0, z: 0.0 },
         },
     ];
     let indices = vec![
