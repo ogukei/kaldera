@@ -52,6 +52,7 @@ pub struct VkSurfaceCapabilitiesKHR {
 pub enum VkStructureTypeExt {
     VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR = 1000005000,
     VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR = 1000001000,
+    VK_STRUCTURE_TYPE_PRESENT_INFO_KHR = 1000001001,
 }
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSurfaceFormatKHR.html
@@ -136,6 +137,19 @@ pub struct VkSwapchainCreateInfoKHR {
     pub oldSwapchain: VkSwapchainKHR,
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPresentInfoKHR.html
+#[repr(C)]
+pub struct VkPresentInfoKHR {
+    pub sType: VkStructureTypeExt,
+    pub pNext: *const c_void,
+    pub waitSemaphoreCount: u32,
+    pub pWaitSemaphores: *const VkSemaphore,
+    pub swapchainCount: u32,
+    pub pSwapchains: *const VkSwapchainKHR,
+    pub pImageIndices: *const u32,
+    pub pResults: *mut VkResult,
+}
+
 #[link(name = "vulkan")]
 extern "C" {
 
@@ -191,6 +205,20 @@ extern "C" {
         swapchain: VkSwapchainKHR,
         pSwapchainImageCount: *mut u32,
         pSwapchainImages: *mut VkImage,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkAcquireNextImageKHR.html
+    pub fn vkAcquireNextImageKHR(
+        device: VkDevice,
+        swapchain: VkSwapchainKHR,
+        timeout: u64,
+        semaphore: VkSemaphore,
+        fence: VkFence,
+        pImageIndex: *mut u32,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkQueuePresentKHR.html
+    pub fn vkQueuePresentKHR(
+        queue: VkQueue,
+        pPresentInfo: *const VkPresentInfoKHR,
     ) -> VkResult;
 }
 

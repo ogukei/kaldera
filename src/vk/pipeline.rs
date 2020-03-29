@@ -5,7 +5,7 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage};
-use super::swapchain::{SwapchainFramebuffers};
+use super::swapchain::{SwapchainFramebuffers, RenderPass};
 
 use std::ptr;
 use std::mem;
@@ -39,6 +39,7 @@ pub struct Vertex {
 pub struct RenderStagingBuffer {
     vertex_buffer: Arc<StagingBuffer>,
     index_buffer: Arc<StagingBuffer>,
+    index_count: usize,
 }
 
 impl RenderStagingBuffer {
@@ -61,8 +62,24 @@ impl RenderStagingBuffer {
         let buffer = RenderStagingBuffer {
             vertex_buffer,
             index_buffer,
+            index_count: indices.len(),
         };
         Arc::new(buffer)
+    }
+
+    #[inline]
+    pub fn vertex_buffer(&self) -> &Arc<StagingBuffer> {
+        &self.vertex_buffer
+    }
+
+    #[inline]
+    pub fn index_buffer(&self) -> &Arc<StagingBuffer> {
+        &self.index_buffer
+    }
+
+    #[inline]
+    pub fn index_count(&self) -> usize {
+        self.index_count
     }
 }
 
@@ -108,20 +125,19 @@ impl Drop for PipelineLayout {
 }
 
 pub struct GraphicsPipeline {
-    framebuffers: Arc<SwapchainFramebuffers>,
+    render_pass: Arc<RenderPass>,
     layout: Arc<PipelineLayout>,
     cache: VkPipelineCache,
     handle: VkPipeline,
 }
 
 impl GraphicsPipeline {
-    pub fn new(framebuffers: &Arc<SwapchainFramebuffers>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
-        unsafe { Self::init(framebuffers, layout) }
+    pub fn new(render_pass: &Arc<RenderPass>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
+        unsafe { Self::init(render_pass, layout) }
     }
 
-    unsafe fn init(framebuffers: &Arc<SwapchainFramebuffers>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
-        let device = framebuffers.device();
-        let render_pass = framebuffers.render_pass();
+    unsafe fn init(render_pass: &Arc<RenderPass>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
+        let device = render_pass.device();
         // input assembly
         let input_assembly_state = VkPipelineInputAssemblyStateCreateInfo {
             sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -302,12 +318,27 @@ impl GraphicsPipeline {
             .unwrap();
         let handle = handle.assume_init();
         let pipeline = GraphicsPipeline {
-            framebuffers: Arc::clone(framebuffers),
+            render_pass: Arc::clone(render_pass),
             layout: Arc::clone(layout),
             cache: cache,
             handle: handle,
         };
         Ok(Arc::new(pipeline))
+    }
+
+    #[inline]
+    pub fn device(&self) -> &Arc<Device> {
+        self.render_pass.device()
+    }
+
+    #[inline]
+    pub fn render_pass(&self) -> &Arc<RenderPass> {
+        &self.render_pass
+    }
+
+    #[inline]
+    pub fn handle(&self) -> VkPipeline {
+        self.handle
     }
 }
 
@@ -315,7 +346,7 @@ impl Drop for GraphicsPipeline {
     fn drop(&mut self) {
         log_debug!("Drop GraphicsPipeline");
         unsafe {
-            let device = self.framebuffers.device();
+            let device = self.render_pass.device();
             vkDestroyPipelineCache(device.handle(), self.cache, ptr::null());
             vkDestroyPipeline(device.handle(), self.handle, ptr::null());
         }
