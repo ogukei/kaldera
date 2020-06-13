@@ -24,10 +24,11 @@ pub struct Swapchain {
 }
 
 impl Swapchain {
-    pub fn new(device_queues: &Arc<DeviceQueues>, extent: VkExtent2D) -> Result<Arc<Self>> {
+    pub fn new(device_queues: &Arc<DeviceQueues>, surface: &Arc<Surface>, extent: VkExtent2D) -> Result<Arc<Self>> {
         let device = device_queues.device();
         let physical_device = device.physical_device();
-        let surface = device_queues.surface();
+        assert_eq!(surface.instance().handle(), device_queues.instance().handle());
+        assert!(surface.is_supported(device_queues.present_queue().family(), physical_device).unwrap_or(false));
         unsafe {
             let surface_capabilities = surface.capabilities(physical_device)?;
             let surface_formats = surface.formats(physical_device)?;

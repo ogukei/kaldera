@@ -68,7 +68,7 @@ impl DeviceQueuesBuilder {
                 let queue = queue.assume_init();
                 let queue = Queue::new(queue, family.clone(), &device);
                 // device queues
-                let device_queues = DeviceQueues::new(surface, device, &queue, &queue);
+                let device_queues = DeviceQueues::new(instance, device, &queue, &queue);
                 Ok(device_queues)
             }
         } else {
@@ -99,7 +99,7 @@ impl DeviceQueuesBuilder {
                 let present_queue = present_queue.assume_init();
                 let present_queue = Queue::new(present_queue, present_family.clone(), &device);
                 // device queues
-                let device_queues = DeviceQueues::new(surface, device, &graphics_queue, &present_queue);
+                let device_queues = DeviceQueues::new(instance, device, &graphics_queue, &present_queue);
                 Ok(device_queues)
             }
         }
@@ -107,16 +107,16 @@ impl DeviceQueuesBuilder {
 }
 
 pub struct DeviceQueues {
-    surface: Arc<Surface>,
+    instance: Arc<Instance>,
     device: Arc<Device>,
     graphics_queue: Arc<Queue>,
     present_queue: Arc<Queue>,
 }
 
 impl DeviceQueues {
-    fn new(surface: &Arc<Surface>, device: Arc<Device>, graphics_queue: &Arc<Queue>, present_queue: &Arc<Queue>) -> Arc<Self> {
+    fn new(instance: &Arc<Instance>, device: Arc<Device>, graphics_queue: &Arc<Queue>, present_queue: &Arc<Queue>) -> Arc<Self> {
         let device_queues = DeviceQueues {
-            surface: Arc::clone(surface),
+            instance: Arc::clone(instance),
             device,
             graphics_queue: Arc::clone(graphics_queue),
             present_queue: Arc::clone(present_queue),
@@ -125,8 +125,8 @@ impl DeviceQueues {
     }
 
     #[inline]
-    pub fn surface(&self) -> &Arc<Surface> {
-        &self.surface
+    pub fn instance(&self) -> &Arc<Instance> {
+        &self.instance
     }
 
     #[inline]
