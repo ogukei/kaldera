@@ -43,7 +43,8 @@ impl DeviceQueuesBuilder {
             .ok_or_else(|| ErrorCode::SuitableQueueFamilyNotFound)?;
         // create infos
         let extension_names = vec![
-            CString::new("VK_KHR_swapchain").unwrap()
+            CString::new("VK_KHR_swapchain").unwrap(),
+            CString::new("VK_KHR_ray_tracing").unwrap(),
         ];
         let extension_name_ptrs: Vec<*const c_char> = extension_names.iter()
             .map(|v| v.as_ptr())

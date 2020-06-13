@@ -58,28 +58,16 @@ fn main() {
     // surface
     let connection = XcbConnection::new();
     let window = XcbWindow::new(&connection);
-    window.change_title("Primary").unwrap();
     let surface = XcbSurface::new(&instance, &window).unwrap();
     // device
     let device_queues = DeviceQueuesBuilder::new(&surface)
         .build()
         .unwrap();
-    let surfaces = vec![
-        surface, 
-        {
-            let window = XcbWindow::new(&connection);
-            window.change_title("Secondary").unwrap();
-            XcbSurface::new(&instance, &window).unwrap()
-        }
-    ];
-    let renderers = surfaces.into_iter()
-        .map(|v| renderer(&device_queues, v))
-        .collect::<Vec<_>>();
+    println!("{:?}", device_queues.device().physical_device().properties_ray_tracing());
+    let renderer = renderer(&device_queues, surface);
     for i in 0..100 {
         println!("frame {}", i);
-        for renderer in renderers.iter() {
-            renderer.draw().unwrap();
-        }
+        renderer.draw().unwrap();
         let events = window.events();
         if let Some(events) = events {
             let event_types: Vec<&XcbEventType> = events.iter()

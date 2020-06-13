@@ -8,7 +8,14 @@ use libc::{c_char, c_float, size_t, c_void};
 use std::ffi::{CStr, CString};
 use std::ptr;
 
-const VK_API_VERSION_1_1: u32 = 4198400;
+#[macro_export]
+macro_rules! vk_version {
+    ($major:expr, $minor:expr, $patch:expr) => {
+        (($major as u32) << 22) | (($minor as u32) << 12) | (($patch as u32) << 0)
+    }
+}
+
+const VK_API_VERSION_1_2: u32 = vk_version!(1, 2, 0);
 
 impl VkApplicationInfo {
     pub fn new(
@@ -24,7 +31,7 @@ impl VkApplicationInfo {
             applicationVersion: application_version,
             pEngineName: engine_name,
             engineVersion: engine_version,
-            apiVersion: VK_API_VERSION_1_1,
+            apiVersion: VK_API_VERSION_1_2,
         }
     }
 }

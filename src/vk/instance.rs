@@ -160,6 +160,27 @@ impl PhysicalDevice {
     }
 }
 
+impl PhysicalDevice {
+    pub fn properties_ray_tracing(&self) -> VkPhysicalDeviceRayTracingPropertiesKHR {
+        unsafe {
+            let mut ray_tracing = MaybeUninit::<VkPhysicalDeviceRayTracingPropertiesKHR>::zeroed();
+            {
+                let ray_tracing = ray_tracing.as_mut_ptr().as_mut().unwrap();
+                ray_tracing.sType = VkStructureTypeExtRay::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_KHR;
+                ray_tracing.pNext = ptr::null_mut();
+            }
+            let mut properties = MaybeUninit::<VkPhysicalDeviceProperties2>::zeroed();
+            {
+                let properties = properties.as_mut_ptr().as_mut().unwrap();
+                properties.sType = VkStructureType::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+                properties.pNext = ray_tracing.as_mut_ptr() as *mut _;
+            }
+            vkGetPhysicalDeviceProperties2(self.handle, properties.as_mut_ptr());
+            ray_tracing.assume_init()
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct QueueFamily {
     index: u32,
