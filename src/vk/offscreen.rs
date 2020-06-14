@@ -5,6 +5,7 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage, ImageMemory};
+use super::swapchain::{DepthStencilImage};
 
 use std::ptr;
 use std::mem;
@@ -127,6 +128,11 @@ impl ColorImage {
     pub fn image_format(&self) -> VkFormat {
         self.image_format
     }
+
+    #[inline]
+    pub fn sampler(&self) -> VkSampler {
+        self.sampler
+    }
 }
 
 impl Drop for ColorImage {
@@ -138,6 +144,175 @@ impl Drop for ColorImage {
             vkDestroyImageView(device.handle(), self.view, std::ptr::null());
             // TODO(?): ImageMemory timing
             vkDestroyImage(device.handle(), self.image, std::ptr::null());
+        }
+    }
+}
+
+pub struct OffscreenRenderPass {
+    device: Arc<Device>,
+    handle: VkRenderPass,
+}
+
+impl OffscreenRenderPass {
+    unsafe fn new(device: &Arc<Device>, color_format: VkFormat, depth_format: VkFormat) -> Result<Arc<Self>> {
+        let attachments = vec![
+            VkAttachmentDescription {
+                flags: 0,
+                format: color_format,
+                samples: VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT,
+                loadOp: VkAttachmentLoadOp::VK_ATTACHMENT_LOAD_OP_CLEAR,
+                storeOp: VkAttachmentStoreOp::VK_ATTACHMENT_STORE_OP_STORE,
+                stencilLoadOp: VkAttachmentLoadOp::VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                stencilStoreOp: VkAttachmentStoreOp::VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                initialLayout: VkImageLayout::VK_IMAGE_LAYOUT_UNDEFINED,
+                finalLayout: VkImageLayout::VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            },
+            VkAttachmentDescription {
+                flags: 0,
+                format: depth_format,
+                samples: VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT,
+                loadOp: VkAttachmentLoadOp::VK_ATTACHMENT_LOAD_OP_CLEAR,
+                storeOp: VkAttachmentStoreOp::VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                stencilLoadOp: VkAttachmentLoadOp::VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                stencilStoreOp: VkAttachmentStoreOp::VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                initialLayout: VkImageLayout::VK_IMAGE_LAYOUT_UNDEFINED,
+                finalLayout: VkImageLayout::VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            },
+        ];
+        let color_reference = VkAttachmentReference {
+            attachment: 0,
+            layout: VkImageLayout::VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        };
+        let depth_reference = VkAttachmentReference {
+            attachment: 1,
+            layout: VkImageLayout::VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        };
+        let subpass_desc = VkSubpassDescription {
+            flags: 0,
+            pipelineBindPoint: VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS,
+            inputAttachmentCount: 0,
+            pInputAttachments: ptr::null(),
+            colorAttachmentCount: 1,
+            pColorAttachments: &color_reference,
+            pResolveAttachments: ptr::null(),
+            pDepthStencilAttachment: &depth_reference,
+            preserveAttachmentCount: 0,
+            pPreserveAttachments: ptr::null(),
+        };
+        let dependencies = vec![
+            VkSubpassDependency {
+                srcSubpass: VK_SUBPASS_EXTERNAL,
+                dstSubpass: 0,
+                srcStageMask: VkPipelineStageFlagBits::VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT as VkPipelineStageFlags,
+                dstStageMask: VkPipelineStageFlagBits::VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT as VkPipelineStageFlags,
+                srcAccessMask: VkAccessFlagBits::VK_ACCESS_SHADER_READ_BIT as VkAccessFlags,
+                dstAccessMask: VkAccessFlagBits::VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT as VkAccessFlags,
+                dependencyFlags: VkDependencyFlagBits::VK_DEPENDENCY_BY_REGION_BIT as VkDependencyFlags,
+            },
+            VkSubpassDependency {
+                srcSubpass: 0,
+                dstSubpass: VK_SUBPASS_EXTERNAL,
+                srcStageMask: VkPipelineStageFlagBits::VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT as VkPipelineStageFlags,
+                dstStageMask: VkPipelineStageFlagBits::VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT as VkPipelineStageFlags,
+                srcAccessMask: VkAccessFlagBits::VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT as VkAccessFlags,
+                dstAccessMask: VkAccessFlagBits::VK_ACCESS_SHADER_READ_BIT as VkAccessFlags,
+                dependencyFlags: VkDependencyFlagBits::VK_DEPENDENCY_BY_REGION_BIT as VkDependencyFlags,
+            },
+        ];
+        let create_info = VkRenderPassCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            attachmentCount: attachments.len() as u32,
+            pAttachments: attachments.as_ptr(),
+            subpassCount: 1,
+            pSubpasses: &subpass_desc,
+            dependencyCount: dependencies.len() as u32,
+            pDependencies: dependencies.as_ptr(),
+        };
+        let mut handle = MaybeUninit::<VkRenderPass>::zeroed();
+        vkCreateRenderPass(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
+            .into_result()
+            .unwrap();
+        let handle = handle.assume_init();
+        let render_pass = OffscreenRenderPass {
+            device: Arc::clone(device),
+            handle,
+        };
+        Ok(Arc::new(render_pass))
+    }
+
+    #[inline]
+    pub fn handle(&self) -> VkRenderPass {
+        self.handle
+    }
+
+    #[inline]
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+}
+
+impl Drop for OffscreenRenderPass {
+    fn drop(&mut self) {
+        log_debug!("Drop OffscreenRenderPass");
+        unsafe {
+            let device = &self.device;
+            vkDestroyRenderPass(device.handle(), self.handle, std::ptr::null());
+        }
+    }
+}
+
+pub struct OffscreenFramebuffer {
+    handle: VkFramebuffer,
+    device: Arc<Device>,
+    color_image: Arc<ColorImage>,
+    depth_image: Arc<DepthStencilImage>,
+    render_pass: Arc<OffscreenRenderPass>,
+}
+
+impl OffscreenFramebuffer {
+    pub unsafe fn new(device: &Arc<Device>, extent: VkExtent3D, width: u32, height: u32) -> Result<Arc<Self>> {
+        let color_image = ColorImage::new(device, extent)?;
+        let depth_image = DepthStencilImage::new(device, extent)?;
+        let render_pass = OffscreenRenderPass::new(device, color_image.image_format(), depth_image.image_format())?;
+        let attachments = vec![
+            color_image.view(),
+            depth_image.view(),
+        ];
+        let create_info = VkFramebufferCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            renderPass: render_pass.handle(),
+            attachmentCount: attachments.len() as u32,
+            pAttachments: attachments.as_ptr(),
+            width: width,
+            height: height,
+            layers: 1,
+        };
+        let mut handle = MaybeUninit::<VkFramebuffer>::zeroed();
+        vkCreateFramebuffer(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
+            .into_result()
+            .unwrap();
+        let handle = handle.assume_init();
+        let framebuffer = Self {
+            handle,
+            device: Arc::clone(device),
+            color_image,
+            depth_image,
+            render_pass,
+        };
+        Ok(Arc::new(framebuffer))
+    }
+}
+
+impl Drop for OffscreenFramebuffer {
+    fn drop(&mut self) {
+        log_debug!("Drop OffscreenFramebuffer");
+        unsafe {
+            let device = &self.device;
+            vkDestroyFramebuffer(device.handle(), self.handle, std::ptr::null());
         }
     }
 }

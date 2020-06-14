@@ -83,12 +83,12 @@ impl RenderStagingBuffer {
     }
 }
 
-pub struct PipelineLayout {
+pub struct SceneGraphicsPipelineLayout {
     device: Arc<Device>,
     handle: VkPipelineLayout,
 }
 
-impl PipelineLayout {
+impl SceneGraphicsPipelineLayout {
     pub fn new(device: &Arc<Device>) -> Result<Arc<Self>> {
         unsafe { Self::init(device) }
     }
@@ -102,7 +102,7 @@ impl PipelineLayout {
                 .unwrap();
         }
         let handle = handle.assume_init();
-        let layout = PipelineLayout {
+        let layout = SceneGraphicsPipelineLayout {
             device: Arc::clone(device),
             handle,
         };
@@ -115,28 +115,28 @@ impl PipelineLayout {
     }
 }
 
-impl Drop for PipelineLayout {
+impl Drop for SceneGraphicsPipelineLayout {
     fn drop(&mut self) {
-        log_debug!("Drop PipelineLayout");
+        log_debug!("Drop SceneGraphicsPipelineLayout");
         unsafe {
             vkDestroyPipelineLayout(self.device.handle(), self.handle, ptr::null());
         }
     }
 }
 
-pub struct GraphicsPipeline {
+pub struct SceneGraphicsPipeline {
     render_pass: Arc<SceneRenderPass>,
-    layout: Arc<PipelineLayout>,
+    layout: Arc<SceneGraphicsPipelineLayout>,
     cache: VkPipelineCache,
     handle: VkPipeline,
 }
 
-impl GraphicsPipeline {
-    pub fn new(render_pass: &Arc<SceneRenderPass>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
+impl SceneGraphicsPipeline {
+    pub fn new(render_pass: &Arc<SceneRenderPass>, layout: &Arc<SceneGraphicsPipelineLayout>) -> Result<Arc<Self>> {
         unsafe { Self::init(render_pass, layout) }
     }
 
-    unsafe fn init(render_pass: &Arc<SceneRenderPass>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
+    unsafe fn init(render_pass: &Arc<SceneRenderPass>, layout: &Arc<SceneGraphicsPipelineLayout>) -> Result<Arc<Self>> {
         let device = render_pass.device();
         // input assembly
         let input_assembly_state = VkPipelineInputAssemblyStateCreateInfo {
@@ -317,7 +317,7 @@ impl GraphicsPipeline {
             .into_result()
             .unwrap();
         let handle = handle.assume_init();
-        let pipeline = GraphicsPipeline {
+        let pipeline = SceneGraphicsPipeline {
             render_pass: Arc::clone(render_pass),
             layout: Arc::clone(layout),
             cache: cache,
@@ -342,9 +342,9 @@ impl GraphicsPipeline {
     }
 }
 
-impl Drop for GraphicsPipeline {
+impl Drop for SceneGraphicsPipeline {
     fn drop(&mut self) {
-        log_debug!("Drop GraphicsPipeline");
+        log_debug!("Drop SceneGraphicsPipeline");
         unsafe {
             let device = self.render_pass.device();
             vkDestroyPipelineCache(device.handle(), self.cache, ptr::null());

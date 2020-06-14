@@ -6,7 +6,7 @@ use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuil
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage};
 use super::swapchain::{SwapchainFramebuffers, SwapchainFramebuffer, SceneRenderPass};
-use super::pipeline::{GraphicsPipeline, RenderStagingBuffer};
+use super::pipeline::{SceneGraphicsPipeline, RenderStagingBuffer};
 
 use std::ptr;
 use std::mem;
@@ -19,7 +19,7 @@ use std::ffi::CString;
 pub struct GraphicsRender {
     frames: Vec<GraphicsFrameRender>,
     framebuffers: Arc<SwapchainFramebuffers>,
-    pipeline: Arc<GraphicsPipeline>,
+    scene_pipeline: Arc<SceneGraphicsPipeline>,
     staging_buffer: Arc<RenderStagingBuffer>,
     command_pool: Arc<CommandPool>,
     present_semaphore: Arc<Semaphore>,
@@ -29,16 +29,16 @@ pub struct GraphicsRender {
 impl GraphicsRender {
     pub fn new(
         framebuffers: &Arc<SwapchainFramebuffers>, 
-        pipeline: &Arc<GraphicsPipeline>,
+        scene_pipeline: &Arc<SceneGraphicsPipeline>,
         staging_buffer: &Arc<RenderStagingBuffer>,
         command_pool: &Arc<CommandPool>,
     ) -> Result<Arc<Self>> {
-        unsafe { Self::init(framebuffers, pipeline, staging_buffer, command_pool) }
+        unsafe { Self::init(framebuffers, scene_pipeline, staging_buffer, command_pool) }
     }
 
     unsafe fn init(
         framebuffers: &Arc<SwapchainFramebuffers>, 
-        pipeline: &Arc<GraphicsPipeline>,
+        scene_pipeline: &Arc<SceneGraphicsPipeline>,
         staging_buffer: &Arc<RenderStagingBuffer>,
         command_pool: &Arc<CommandPool>,
     ) -> Result<Arc<Self>> {
@@ -57,12 +57,12 @@ impl GraphicsRender {
         let frame_renders: Result<Vec<GraphicsFrameRender>>;
         frame_renders = framebuffers.framebuffers()
             .iter()
-            .map(|framebuffer| GraphicsFrameRender::new(framebuffer, render_pass, command_pool, pipeline, staging_buffer, area))
+            .map(|framebuffer| GraphicsFrameRender::new(framebuffer, render_pass, command_pool, scene_pipeline, staging_buffer, area))
             .collect();
         let render = GraphicsRender {
             frames: frame_renders?,
             framebuffers: Arc::clone(framebuffers),
-            pipeline: Arc::clone(pipeline),
+            scene_pipeline: Arc::clone(scene_pipeline),
             staging_buffer: Arc::clone(staging_buffer),
             command_pool: Arc::clone(command_pool),
             present_semaphore: Semaphore::new(device)?,
@@ -97,7 +97,7 @@ impl GraphicsFrameRender {
         framebuffer: &SwapchainFramebuffer, 
         render_pass: &Arc<SceneRenderPass>,
         command_pool: &Arc<CommandPool>, 
-        pipeline: &Arc<GraphicsPipeline>,
+        scene_pipeline: &Arc<SceneGraphicsPipeline>,
         staging_buffer: &Arc<RenderStagingBuffer>,
         area: VkRect2D
     ) -> Result<Self> {
@@ -131,7 +131,7 @@ impl GraphicsFrameRender {
             vkCmdSetViewport(command_buffer, 0, 1, &viewport);
             let scissor = area;
             vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-            vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle());
+            vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS, scene_pipeline.handle());
             let offset: VkDeviceSize = 0;
             let vertex_buffer: VkBuffer = staging_buffer.vertex_buffer().device_buffer_memory().buffer();
             vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer, &offset);

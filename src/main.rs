@@ -28,8 +28,8 @@ fn _main() {
 fn renderer(device_queues: &Arc<DeviceQueues>, surface: Arc<Surface>) -> Arc<GraphicsRender> {
     let swapchain = Swapchain::new(&device_queues, &surface, VkExtent2D { width: 400, height: 400 }).unwrap();
     let framebuffers = SwapchainFramebuffers::new(&swapchain).unwrap();
-    let layout = PipelineLayout::new(device_queues.device()).unwrap();
-    let pipeline = GraphicsPipeline::new(framebuffers.render_pass(), &layout).unwrap();
+    let layout = SceneGraphicsPipelineLayout::new(device_queues.device()).unwrap();
+    let pipeline = SceneGraphicsPipeline::new(framebuffers.render_pass(), &layout).unwrap();
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
     let vertices = vec![
         Vertex {
