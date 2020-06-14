@@ -18,8 +18,8 @@ pub struct Instance {
 
 impl Instance {
     pub fn new() -> Result<Arc<Instance>> {
-        let application_name = CString::new("karst")?;
-        let engine_name = CString::new("Stalagmite Engine")?;
+        let application_name = CString::new("kaldera")?;
+        let engine_name = CString::new("Kaldera Engine")?;
         let app_info = VkApplicationInfo::new(application_name.as_ptr(), 0, engine_name.as_ptr(), 0);
         let extension_names: Vec<CString> = vec![
             CString::new("VK_KHR_surface").unwrap(),

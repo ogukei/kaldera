@@ -1,9 +1,9 @@
 
-extern crate karst;
+extern crate kaldera;
 
-use karst::ffi::vk::*;
-use karst::ffi::xcb::*;
-use karst::vk::*;
+use kaldera::ffi::vk::*;
+use kaldera::ffi::xcb::*;
+use kaldera::vk::*;
 
 fn main() {
     let instance = Instance::new().unwrap();
