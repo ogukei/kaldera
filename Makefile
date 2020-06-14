@@ -19,13 +19,13 @@ clean:
 $(BUILD_DIR)/%.vert.spv: $(SOURCE_DIR)/%.vert
 	glslc -O \
 	-c $< \
-	--target-env=vulkan1.1 \
+	--target-env=vulkan1.2 \
 	--target-spv=spv1.3 \
 	-o $@
 
 $(BUILD_DIR)/%.frag.spv: $(SOURCE_DIR)/%.frag
 	glslc -O \
 	-c $< \
-	--target-env=vulkan1.1 \
+	--target-env=vulkan1.2 \
 	--target-spv=spv1.3 \
 	-o $@
