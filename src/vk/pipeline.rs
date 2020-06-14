@@ -5,7 +5,7 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage};
-use super::swapchain::{SwapchainFramebuffers, RenderPass};
+use super::swapchain::{SwapchainFramebuffers, SceneRenderPass};
 
 use std::ptr;
 use std::mem;
@@ -125,18 +125,18 @@ impl Drop for PipelineLayout {
 }
 
 pub struct GraphicsPipeline {
-    render_pass: Arc<RenderPass>,
+    render_pass: Arc<SceneRenderPass>,
     layout: Arc<PipelineLayout>,
     cache: VkPipelineCache,
     handle: VkPipeline,
 }
 
 impl GraphicsPipeline {
-    pub fn new(render_pass: &Arc<RenderPass>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
+    pub fn new(render_pass: &Arc<SceneRenderPass>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
         unsafe { Self::init(render_pass, layout) }
     }
 
-    unsafe fn init(render_pass: &Arc<RenderPass>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
+    unsafe fn init(render_pass: &Arc<SceneRenderPass>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
         let device = render_pass.device();
         // input assembly
         let input_assembly_state = VkPipelineInputAssemblyStateCreateInfo {
@@ -332,7 +332,7 @@ impl GraphicsPipeline {
     }
 
     #[inline]
-    pub fn render_pass(&self) -> &Arc<RenderPass> {
+    pub fn render_pass(&self) -> &Arc<SceneRenderPass> {
         &self.render_pass
     }
 

@@ -55,6 +55,7 @@ pub type VkPipelineColorBlendStateCreateFlags = VkFlags;
 pub type VkColorComponentFlags = VkFlags;
 pub type VkPipelineDynamicStateCreateFlags = VkFlags;
 pub type VkSemaphoreCreateFlags = VkFlags;
+pub type VkSamplerCreateFlags = VkFlags;
 
 #[repr(C)]
 pub struct VkInstanceOpaque { _private: [u8; 0] }
@@ -2067,12 +2068,73 @@ pub enum VkIndexType {
     VK_INDEX_TYPE_MAX_ENUM = 0x7FFFFFFF
 }
 
-// #see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSemaphoreCreateInfo.html
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSemaphoreCreateInfo.html
 #[repr(C)]
 pub struct VkSemaphoreCreateInfo {
     pub sType: VkStructureType,
     pub pNext: *const c_void,
     pub flags: VkSemaphoreCreateFlags,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkFilter.html
+#[repr(C)]
+pub enum VkFilter {
+    VK_FILTER_NEAREST = 0,
+    VK_FILTER_LINEAR = 1,
+    VK_FILTER_CUBIC_IMG = 1000015000,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSamplerMipmapMode.html
+#[repr(C)]
+pub enum VkSamplerMipmapMode {
+    VK_SAMPLER_MIPMAP_MODE_NEAREST = 0,
+    VK_SAMPLER_MIPMAP_MODE_LINEAR = 1,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSamplerAddressMode.html
+#[repr(C)]
+pub enum VkSamplerAddressMode {
+    VK_SAMPLER_ADDRESS_MODE_REPEAT = 0,
+    VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT = 1,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE = 2,
+    VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER = 3,
+    VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE = 4,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkBorderColor.html
+#[repr(C)]
+pub enum VkBorderColor {
+    VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK = 0,
+    VK_BORDER_COLOR_INT_TRANSPARENT_BLACK = 1,
+    VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK = 2,
+    VK_BORDER_COLOR_INT_OPAQUE_BLACK = 3,
+    VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE = 4,
+    VK_BORDER_COLOR_INT_OPAQUE_WHITE = 5,
+    VK_BORDER_COLOR_FLOAT_CUSTOM_EXT = 1000287003,
+    VK_BORDER_COLOR_INT_CUSTOM_EXT = 1000287004,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkSamplerCreateInfo.html
+#[repr(C)]
+pub struct VkSamplerCreateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub flags: VkSamplerCreateFlags,
+    pub magFilter: VkFilter,
+    pub minFilter: VkFilter,
+    pub mipmapMode: VkSamplerMipmapMode,
+    pub addressModeU: VkSamplerAddressMode,
+    pub addressModeV: VkSamplerAddressMode,
+    pub addressModeW: VkSamplerAddressMode,
+    pub mipLodBias: c_float,
+    pub anisotropyEnable: VkBool32,
+    pub maxAnisotropy: c_float,
+    pub compareEnable: VkBool32,
+    pub compareOp: VkCompareOp,
+    pub minLod: c_float,
+    pub maxLod: c_float,
+    pub borderColor: VkBorderColor,
+    pub unnormalizedCoordinates: VkBool32,
 }
 
 #[link(name = "vulkan")]
@@ -2567,5 +2629,18 @@ extern "C" {
     pub fn vkGetPhysicalDeviceProperties2(
         physicalDevice: VkPhysicalDevice,
         pProperties: *mut VkPhysicalDeviceProperties2,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateSampler.html
+    pub fn vkCreateSampler(
+        device: VkDevice,
+        pCreateInfo: *const VkSamplerCreateInfo,
+        pAllocator: *const VkAllocationCallbacks,
+        pSampler: *mut VkSampler,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroySampler.html
+    pub fn vkDestroySampler(
+        device: VkDevice,
+        sampler: VkSampler,
+        pAllocator: *const VkAllocationCallbacks,
     );
 }

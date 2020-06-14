@@ -22,6 +22,7 @@ mod memory;
 mod swapchain;
 mod pipeline;
 mod render;
+mod offscreen;
 
 pub use error::*;
 pub use instance::*;
@@ -32,3 +33,4 @@ pub use memory::*;
 pub use swapchain::*;
 pub use pipeline::*;
 pub use render::*;
+pub use offscreen::*;

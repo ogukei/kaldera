@@ -5,7 +5,7 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage};
-use super::swapchain::{SwapchainFramebuffers, Framebuffer, RenderPass};
+use super::swapchain::{SwapchainFramebuffers, SwapchainFramebuffer, SceneRenderPass};
 use super::pipeline::{GraphicsPipeline, RenderStagingBuffer};
 
 use std::ptr;
@@ -94,8 +94,8 @@ struct GraphicsFrameRender {
 
 impl GraphicsFrameRender {
     unsafe fn new(
-        framebuffer: &Framebuffer, 
-        render_pass: &Arc<RenderPass>,
+        framebuffer: &SwapchainFramebuffer, 
+        render_pass: &Arc<SceneRenderPass>,
         command_pool: &Arc<CommandPool>, 
         pipeline: &Arc<GraphicsPipeline>,
         staging_buffer: &Arc<RenderStagingBuffer>,

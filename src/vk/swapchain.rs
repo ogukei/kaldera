@@ -329,12 +329,12 @@ impl Drop for DepthStencilImage {
     }
 }
 
-pub struct RenderPass {
+pub struct SceneRenderPass {
     device: Arc<Device>,
     handle: VkRenderPass,
 }
 
-impl RenderPass {
+impl SceneRenderPass {
     unsafe fn new(device: &Arc<Device>, color_format: VkFormat, depth_format: VkFormat) -> Result<Arc<Self>> {
         let attachments = vec![
             VkAttachmentDescription {
@@ -418,7 +418,7 @@ impl RenderPass {
             .into_result()
             .unwrap();
         let handle = handle.assume_init();
-        let render_pass = RenderPass {
+        let render_pass = SceneRenderPass {
             device: Arc::clone(device),
             handle,
         };
@@ -436,9 +436,9 @@ impl RenderPass {
     }
 }
 
-impl Drop for RenderPass {
+impl Drop for SceneRenderPass {
     fn drop(&mut self) {
-        log_debug!("Drop RenderPass");
+        log_debug!("Drop SceneRenderPass");
         unsafe {
             let device = &self.device;
             vkDestroyRenderPass(device.handle(), self.handle, std::ptr::null());
@@ -450,8 +450,8 @@ impl Drop for RenderPass {
 pub struct SwapchainFramebuffers {
     swapchain: Arc<Swapchain>,
     depth_stencil: Arc<DepthStencilImage>,
-    render_pass: Arc<RenderPass>,
-    framebuffers: Vec<Framebuffer>,
+    render_pass: Arc<SceneRenderPass>,
+    framebuffers: Vec<SwapchainFramebuffer>,
 }
 
 impl SwapchainFramebuffers {
@@ -465,11 +465,11 @@ impl SwapchainFramebuffers {
         let width = extent.width;
         let height = extent.height;
         let depth_stencil = DepthStencilImage::new(device, VkExtent3D { width, height, depth: 1 })?;
-        let render_pass = RenderPass::new(device, swapchain.image_format(), depth_stencil.image_format())?;
-        let framebuffers: Result<Vec<Framebuffer>>;
+        let render_pass = SceneRenderPass::new(device, swapchain.image_format(), depth_stencil.image_format())?;
+        let framebuffers: Result<Vec<SwapchainFramebuffer>>;
         framebuffers = swapchain.images()
             .iter()
-            .map(|image| Framebuffer::new(device, &render_pass, image, &depth_stencil, width, height))
+            .map(|image| SwapchainFramebuffer::new(device, &render_pass, image, &depth_stencil, width, height))
             .collect();
         let swapchain_framebuffers = SwapchainFramebuffers {
             swapchain: Arc::clone(swapchain),
@@ -486,12 +486,12 @@ impl SwapchainFramebuffers {
     }
 
     #[inline]
-    pub fn render_pass(&self) -> &Arc<RenderPass> {
+    pub fn render_pass(&self) -> &Arc<SceneRenderPass> {
         &self.render_pass
     }
 
     #[inline]
-    pub fn framebuffers(&self) -> &Vec<Framebuffer> {
+    pub fn framebuffers(&self) -> &Vec<SwapchainFramebuffer> {
         &self.framebuffers
     }
 
@@ -501,15 +501,15 @@ impl SwapchainFramebuffers {
     }
 }
 
-pub struct Framebuffer {
+pub struct SwapchainFramebuffer {
     device: Arc<Device>,
     handle: VkFramebuffer,
 }
 
-impl Framebuffer {
+impl SwapchainFramebuffer {
     unsafe fn new(
         device: &Arc<Device>,
-        render_pass: &Arc<RenderPass>,
+        render_pass: &Arc<SceneRenderPass>,
         swapchain_image: &SwapchainImage, 
         depth_stencil: &DepthStencilImage,
         width: u32,
@@ -534,7 +534,7 @@ impl Framebuffer {
             .into_result()
             .unwrap();
         let handle = handle.assume_init();
-        let framebuffer = Framebuffer {
+        let framebuffer = SwapchainFramebuffer {
             device: Arc::clone(device),
             handle,
         };
@@ -547,9 +547,9 @@ impl Framebuffer {
     }
 }
 
-impl Drop for Framebuffer {
+impl Drop for SwapchainFramebuffer {
     fn drop(&mut self) {
-        log_debug!("Drop Framebuffer");
+        log_debug!("Drop SwapchainFramebuffer");
         unsafe {
             let device = &self.device;
             vkDestroyFramebuffer(device.handle(), self.handle, std::ptr::null());
