@@ -352,6 +352,26 @@ impl VkWriteDescriptorSet {
             pTexelBufferView: ptr::null(),
         }
     }
+
+    pub fn from_image(
+        dst_set: VkDescriptorSet, 
+        descriptor_type: VkDescriptorType,
+        dst_binding: u32,
+        image_info: *const VkDescriptorImageInfo,
+    ) -> Self {
+        VkWriteDescriptorSet {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            pNext: ptr::null(),
+            dstSet: dst_set,
+            dstBinding: dst_binding,
+            dstArrayElement: 0,
+            descriptorCount: 1,
+            descriptorType: descriptor_type,
+            pImageInfo: image_info,
+            pBufferInfo: ptr::null(),
+            pTexelBufferView: ptr::null(),
+        }
+    }
 }
 
 impl VkPipelineCacheCreateInfo {

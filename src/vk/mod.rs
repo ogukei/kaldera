@@ -19,7 +19,11 @@ mod surface;
 mod device;
 mod device_queues;
 mod memory;
+mod geometry;
+mod model;
 
+mod staging;
+mod image;
 mod swapchain;
 mod pipeline;
 mod render;
@@ -31,6 +35,11 @@ pub use surface::*;
 pub use device::*;
 pub use device_queues::*;
 pub use memory::*;
+pub use geometry::*;
+pub use model::*;
+
+pub use staging::*;
+pub use image::*;
 pub use swapchain::*;
 pub use pipeline::*;
 pub use render::*;

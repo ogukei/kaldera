@@ -6,30 +6,33 @@ use kaldera::ffi::xcb::*;
 use kaldera::vk::*;
 use kaldera::base::Environment;
 use kaldera::base::*;
-
 use futures::executor::block_on;
 use std::sync::Arc;
 
-fn _main() {
-    let env = Environment::new();
-    block_on(async {
-        let input_context = env.input().acquire_xcb().await;
-        let window = input_context.create_window(400, 400).await
-            .unwrap();
-
-        let base = env.base();
-        let surface_context = Render3DSurfaceContext::new(base, window.surface());
-        
-    });
-
-    std::thread::sleep(std::time::Duration::from_secs(1));
-}
-
 fn renderer(device_queues: &Arc<DeviceQueues>, surface: Arc<Surface>) -> Arc<GraphicsRender> {
+    let device = device_queues.device();
     let swapchain = Swapchain::new(&device_queues, &surface, VkExtent2D { width: 400, height: 400 }).unwrap();
     let framebuffers = SwapchainFramebuffers::new(&swapchain).unwrap();
-    let layout = SceneGraphicsPipelineLayout::new(device_queues.device()).unwrap();
-    let pipeline = SceneGraphicsPipeline::new(framebuffers.render_pass(), &layout).unwrap();
+    let extent_2d = VkExtent2D {
+        width: 400,
+        height: 400,
+    };
+    let extent_3d = VkExtent3D {
+        width: 400,
+        height: 400,
+        depth: 1,
+    };
+    let offscreen_framebuffer = OffscreenFramebuffer::new(device, extent_3d, extent_2d.width, extent_2d.height).unwrap();
+    let offscreen_layout = OffscreenGraphicsPipelineLayout::new(device).unwrap();
+    let offscreen_pipeline = OffscreenGraphicsPipeline::new(offscreen_framebuffer.render_pass(), &offscreen_layout).unwrap();
+    // scene
+    let scene_image_info = VkDescriptorImageInfo {
+        imageLayout: VkImageLayout::VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        imageView: offscreen_framebuffer.color_image().view(),
+        sampler: offscreen_framebuffer.color_image().sampler(),
+    };
+    let scene_layout = SceneGraphicsPipelineLayout::new(device, scene_image_info).unwrap();
+    let scene_pipeline = SceneGraphicsPipeline::new(framebuffers.render_pass(), &scene_layout).unwrap();
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
     let vertices = vec![
         Vertex {
@@ -48,8 +51,15 @@ fn renderer(device_queues: &Arc<DeviceQueues>, surface: Arc<Surface>) -> Arc<Gra
     let indices = vec![
         0, 1, 2,
     ];
-    let staging_buffer = RenderStagingBuffer::new(&command_pool, vertices, indices);
-    let render = GraphicsRender::new(&framebuffers, &pipeline, &staging_buffer, &command_pool).unwrap();
+    let staging_buffer = VertexStagingBuffer::new(&command_pool, vertices, indices);
+    let render = GraphicsRender::new(
+        &command_pool, 
+        &framebuffers, 
+        &offscreen_framebuffer, 
+        &offscreen_pipeline, 
+        &scene_pipeline, 
+        &staging_buffer, 
+        extent_2d).unwrap();
     render
 }
 

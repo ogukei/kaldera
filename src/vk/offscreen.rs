@@ -5,7 +5,10 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage, ImageMemory};
-use super::swapchain::{DepthStencilImage};
+use super::staging::VertexStagingBuffer;
+use super::geometry::{Vec3, Vec4};
+use super::image::{ColorImage, DepthStencilImage};
+use super::model::Vertex;
 
 use std::ptr;
 use std::mem;
@@ -14,139 +17,6 @@ use libc::{c_float, c_void};
 use std::sync::Arc;
 use std::io::Read;
 use std::ffi::CString;
-
-pub struct ColorImage {
-    device: Arc<Device>,
-    image: VkImage,
-    view: VkImageView,
-    sampler: VkSampler,
-    memory: Arc<ImageMemory>,
-    image_format: VkFormat,
-}
-
-impl ColorImage {
-    pub unsafe fn new(device: &Arc<Device>, extent: VkExtent3D) -> Result<Arc<Self>> {
-        let format = VkFormat::VK_FORMAT_R8G8B8A8_UNORM;
-        // image
-        let mut image_handle = MaybeUninit::<VkImage>::zeroed();
-        {
-            let create_info = VkImageCreateInfo {
-                sType: VkStructureType::VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-                pNext: std::ptr::null(),
-                flags: 0,
-                imageType: VkImageType::VK_IMAGE_TYPE_2D,
-                format: format,
-                extent: extent,
-                mipLevels: 1,
-                arrayLayers: 1,
-                samples: VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT,
-                tiling: VkImageTiling::VK_IMAGE_TILING_OPTIMAL,
-                usage: VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT as VkImageUsageFlags
-                    | VkImageUsageFlagBits::VK_IMAGE_USAGE_SAMPLED_BIT as VkImageUsageFlags
-                    | VkImageUsageFlagBits::VK_IMAGE_USAGE_STORAGE_BIT as VkImageUsageFlags,
-                sharingMode: VkSharingMode::VK_SHARING_MODE_EXCLUSIVE,
-                queueFamilyIndexCount: 0,
-                pQueueFamilyIndices: std::ptr::null(),
-                initialLayout: VkImageLayout::VK_IMAGE_LAYOUT_UNDEFINED,
-            };
-            vkCreateImage(device.handle(), &create_info, std::ptr::null(), image_handle.as_mut_ptr())
-                .into_result()
-                .unwrap();
-        }
-        let image_handle = image_handle.assume_init();
-        // memory
-        let image_memory = ImageMemory::new(device, image_handle)?;
-        // view
-        let mut view_handle = MaybeUninit::<VkImageView>::zeroed();
-        {
-            let create_info = VkImageViewCreateInfo {
-                sType: VkStructureType::VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                pNext: std::ptr::null(),
-                flags: 0,
-                image: image_handle,
-                viewType: VkImageViewType::VK_IMAGE_VIEW_TYPE_2D,
-                format: format,
-                components: VkComponentMapping::default(),
-                subresourceRange: VkImageSubresourceRange {
-                    aspectMask: VkImageAspectFlagBits::VK_IMAGE_ASPECT_COLOR_BIT as VkImageAspectFlags,
-                    baseMipLevel: 0,
-                    levelCount: 1,
-                    baseArrayLayer: 0,
-                    layerCount: 1,
-                },
-            };
-            vkCreateImageView(device.handle(), &create_info, ptr::null(), view_handle.as_mut_ptr())
-                .into_result()
-                .unwrap();
-        }
-        let view_handle = view_handle.assume_init();
-        // sampler
-        let mut sampler_handle = MaybeUninit::<VkSampler>::zeroed();
-        {
-            let create_info = VkSamplerCreateInfo {
-                sType: VkStructureType::VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-                pNext: ptr::null(),
-                flags: 0,
-                magFilter: VkFilter::VK_FILTER_LINEAR,
-                minFilter: VkFilter::VK_FILTER_LINEAR,
-                mipmapMode: VkSamplerMipmapMode::VK_SAMPLER_MIPMAP_MODE_LINEAR,
-                addressModeU: VkSamplerAddressMode::VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                addressModeV: VkSamplerAddressMode::VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                addressModeW: VkSamplerAddressMode::VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                mipLodBias: 0.0,
-                anisotropyEnable: VK_FALSE,
-                maxAnisotropy: 1.0,
-                compareEnable: VK_FALSE,
-                compareOp: VkCompareOp::VK_COMPARE_OP_NEVER,
-                minLod: 0.0,
-                maxLod: 1.0,
-                borderColor: VkBorderColor::VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
-                unnormalizedCoordinates: VK_FALSE,
-            };
-            vkCreateSampler(device.handle(), &create_info, ptr::null(), sampler_handle.as_mut_ptr())
-                .into_result()
-                .unwrap();
-        }
-        let sampler_handle = sampler_handle.assume_init();
-        let image = ColorImage {
-            device: Arc::clone(device),
-            image: image_handle,
-            view: view_handle,
-            sampler: sampler_handle,
-            memory: image_memory,
-            image_format: format,
-        };
-        Ok(Arc::new(image))
-    }
-
-    #[inline]
-    pub fn view(&self) -> VkImageView {
-        self.view
-    }
-
-    #[inline]
-    pub fn image_format(&self) -> VkFormat {
-        self.image_format
-    }
-
-    #[inline]
-    pub fn sampler(&self) -> VkSampler {
-        self.sampler
-    }
-}
-
-impl Drop for ColorImage {
-    fn drop(&mut self) {
-        log_debug!("Drop ColorImage");
-        unsafe {
-            let device = &self.device;
-            vkDestroySampler(device.handle(), self.sampler, std::ptr::null());
-            vkDestroyImageView(device.handle(), self.view, std::ptr::null());
-            // TODO(?): ImageMemory timing
-            vkDestroyImage(device.handle(), self.image, std::ptr::null());
-        }
-    }
-}
 
 pub struct OffscreenRenderPass {
     device: Arc<Device>,
@@ -272,7 +142,13 @@ pub struct OffscreenFramebuffer {
 }
 
 impl OffscreenFramebuffer {
-    pub unsafe fn new(device: &Arc<Device>, extent: VkExtent3D, width: u32, height: u32) -> Result<Arc<Self>> {
+    pub fn new(device: &Arc<Device>, extent: VkExtent3D, width: u32, height: u32) -> Result<Arc<Self>> {
+        unsafe {
+            Self::init(device, extent, width, height)
+        }
+    }
+
+    unsafe fn init(device: &Arc<Device>, extent: VkExtent3D, width: u32, height: u32) -> Result<Arc<Self>> {
         let color_image = ColorImage::new(device, extent)?;
         let depth_image = DepthStencilImage::new(device, extent)?;
         let render_pass = OffscreenRenderPass::new(device, color_image.image_format(), depth_image.image_format())?;
@@ -305,6 +181,21 @@ impl OffscreenFramebuffer {
         };
         Ok(Arc::new(framebuffer))
     }
+
+    #[inline]
+    pub fn render_pass(&self) -> &Arc<OffscreenRenderPass> {
+        &self.render_pass
+    }
+
+    #[inline]
+    pub fn handle(&self) -> VkFramebuffer {
+        self.handle
+    }
+
+    #[inline]
+    pub fn color_image(&self) -> &Arc<ColorImage> {
+        &self.color_image
+    }
 }
 
 impl Drop for OffscreenFramebuffer {
@@ -314,5 +205,334 @@ impl Drop for OffscreenFramebuffer {
             let device = &self.device;
             vkDestroyFramebuffer(device.handle(), self.handle, std::ptr::null());
         }
+    }
+}
+
+pub struct OffscreenFrameRender {
+    command_buffer: Arc<CommandBuffer>,
+}
+
+impl OffscreenFrameRender {
+    pub unsafe fn new(
+        framebuffer: &Arc<OffscreenFramebuffer>,
+        command_pool: &Arc<CommandPool>, 
+        pipeline: &Arc<OffscreenGraphicsPipeline>,
+        staging_buffer: &Arc<VertexStagingBuffer>,
+        area: VkRect2D
+    ) -> Result<Self> {
+        let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
+            let render_pass = framebuffer.render_pass();
+            let clear_values = vec![
+                VkClearValue {
+                    values: [0.0, 0.0, 0.2, 1.0],
+                },
+                VkClearValue {
+                    values: [1.0, 0.0, 0.0, 0.0],
+                },
+            ];
+            let render_pass_begin_info = VkRenderPassBeginInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+                pNext: ptr::null(),
+                renderPass: render_pass.handle(),
+                framebuffer: framebuffer.handle(),
+                renderArea: area,
+                clearValueCount: clear_values.len() as u32,
+                pClearValues: clear_values.as_ptr(),
+            };
+            vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
+            let viewport = VkViewport {
+                x: 0.0,
+                y: 0.0,
+                width: area.extent.width as c_float,
+                height: area.extent.height as c_float,
+                minDepth: 0.0,
+                maxDepth: 1.0,
+            };
+            vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+            let scissor = area;
+            vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+            vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle());
+            let offset: VkDeviceSize = 0;
+            let vertex_buffer: VkBuffer = staging_buffer.vertex_buffer().device_buffer_memory().buffer();
+            vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer, &offset);
+            let index_buffer: VkBuffer = staging_buffer.index_buffer().device_buffer_memory().buffer();
+            vkCmdBindIndexBuffer(command_buffer, index_buffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
+            vkCmdDrawIndexed(command_buffer, staging_buffer.index_count() as u32, 1, 0, 0, 0);
+            vkCmdEndRenderPass(command_buffer);
+        });
+        let render = OffscreenFrameRender {
+            command_buffer,
+        };
+        Ok(render)
+    }
+
+    #[inline]
+    fn command_buffer(&self) -> &Arc<CommandBuffer> {
+        &self.command_buffer
+    }
+}
+
+pub struct OffscreenGraphicsPipelineLayout {
+    device: Arc<Device>,
+    handle: VkPipelineLayout,
+}
+
+impl OffscreenGraphicsPipelineLayout {
+    pub fn new(device: &Arc<Device>) -> Result<Arc<Self>> {
+        unsafe { Self::init(device) }
+    }
+
+    unsafe fn init(device: &Arc<Device>) -> Result<Arc<Self>> {
+        let mut handle = MaybeUninit::<VkPipelineLayout>::zeroed();
+        {
+            let create_info = VkPipelineLayoutCreateInfo::new(0, ptr::null());
+            vkCreatePipelineLayout(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let handle = handle.assume_init();
+        let layout = OffscreenGraphicsPipelineLayout {
+            device: Arc::clone(device),
+            handle,
+        };
+        Ok(Arc::new(layout))
+    }
+
+    #[inline]
+    pub fn handle(&self) -> VkPipelineLayout {
+        self.handle
+    }
+}
+
+impl Drop for OffscreenGraphicsPipelineLayout {
+    fn drop(&mut self) {
+        log_debug!("Drop OffscreenGraphicsPipelineLayout");
+        unsafe {
+            vkDestroyPipelineLayout(self.device.handle(), self.handle, ptr::null());
+        }
+    }
+}
+
+pub struct OffscreenGraphicsPipeline {
+    render_pass: Arc<OffscreenRenderPass>,
+    layout: Arc<OffscreenGraphicsPipelineLayout>,
+    cache: VkPipelineCache,
+    handle: VkPipeline,
+}
+
+impl OffscreenGraphicsPipeline {
+    pub fn new(
+        render_pass: &Arc<OffscreenRenderPass>, 
+        layout: &Arc<OffscreenGraphicsPipelineLayout>
+    ) -> Result<Arc<Self>> {
+        unsafe { Self::init(render_pass, layout) }
+    }
+
+    unsafe fn init(
+        render_pass: &Arc<OffscreenRenderPass>, 
+        layout: &Arc<OffscreenGraphicsPipelineLayout>
+    ) -> Result<Arc<Self>> {
+        let device = render_pass.device();
+        // input assembly
+        let input_assembly_state = VkPipelineInputAssemblyStateCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            topology: VkPrimitiveTopology::VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+            primitiveRestartEnable: VK_FALSE,
+        };
+        // rasterization
+        let rasterization_state = VkPipelineRasterizationStateCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            depthClampEnable: VK_FALSE,
+            rasterizerDiscardEnable: VK_FALSE,
+            polygonMode: VkPolygonMode::VK_POLYGON_MODE_FILL,
+            cullMode: VkCullModeFlagBits::VK_CULL_MODE_NONE as VkCullModeFlags,
+            frontFace: VkFrontFace::VK_FRONT_FACE_COUNTER_CLOCKWISE,
+            depthBiasEnable: VK_FALSE,
+            depthBiasConstantFactor: 0.0,
+            depthBiasClamp: 0.0,
+            depthBiasSlopeFactor: 0.0,
+            lineWidth: 1.0,
+        };
+        // color blend
+        let color_blend_attachment_state = VkPipelineColorBlendAttachmentState {
+            blendEnable: VK_FALSE,
+            srcColorBlendFactor: VkBlendFactor::VK_BLEND_FACTOR_ZERO,
+            dstColorBlendFactor: VkBlendFactor::VK_BLEND_FACTOR_ZERO,
+            colorBlendOp: VkBlendOp::VK_BLEND_OP_ADD,
+            srcAlphaBlendFactor: VkBlendFactor::VK_BLEND_FACTOR_ZERO,
+            dstAlphaBlendFactor: VkBlendFactor::VK_BLEND_FACTOR_ZERO,
+            alphaBlendOp: VkBlendOp::VK_BLEND_OP_ADD,
+            colorWriteMask: VkColorComponentFlagBits::rgba(),
+        };
+        let color_blend_state = VkPipelineColorBlendStateCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            logicOpEnable: VK_FALSE,
+            logicOp: VkLogicOp::VK_LOGIC_OP_CLEAR,
+            attachmentCount: 1,
+            pAttachments: &color_blend_attachment_state,
+            blendConstants: [0.0; 4],
+        };
+        // viewport (dynamic state)
+        let viewport_state = VkPipelineViewportStateCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            viewportCount: 1,
+            pViewports: ptr::null(),
+            scissorCount: 1,
+            pScissors: ptr::null(),
+        };
+        let dynamic_state_enables = vec![
+            VkDynamicState::VK_DYNAMIC_STATE_VIEWPORT,
+            VkDynamicState::VK_DYNAMIC_STATE_SCISSOR,
+        ];
+        let dynamic_state = VkPipelineDynamicStateCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            dynamicStateCount: dynamic_state_enables.len() as u32,
+            pDynamicStates: dynamic_state_enables.as_ptr(),
+        };
+        // depth stencil
+        let depth_stencil_state = VkPipelineDepthStencilStateCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            depthTestEnable: VK_TRUE,
+            depthWriteEnable: VK_TRUE,
+            depthCompareOp: VkCompareOp::VK_COMPARE_OP_LESS_OR_EQUAL,
+            depthBoundsTestEnable: VK_FALSE,
+            stencilTestEnable: VK_FALSE,
+            front: VkStencilOpState::default(),
+            back: VkStencilOpState::default(),
+            minDepthBounds: 0.0,
+            maxDepthBounds: 0.0,
+        };
+        // multisampling
+        let multisampling_state = VkPipelineMultisampleStateCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            rasterizationSamples: VkSampleCountFlagBits::VK_SAMPLE_COUNT_1_BIT,
+            sampleShadingEnable: VK_FALSE,
+            minSampleShading: 0.0,
+            pSampleMask: ptr::null(),
+            alphaToCoverageEnable: VK_FALSE,
+            alphaToOneEnable: VK_FALSE,
+        };
+        // vertex input
+        let vertex_input_binding = VkVertexInputBindingDescription {
+            binding: 0,
+            stride: std::mem::size_of::<Vertex>() as u32,
+            inputRate: VkVertexInputRate::VK_VERTEX_INPUT_RATE_VERTEX,
+        };
+        let vertex_input_attributes = vec![
+            VkVertexInputAttributeDescription {
+                location: 0,
+                binding: 0,
+                format: VkFormat::VK_FORMAT_R32G32B32_SFLOAT,
+                offset: 0,
+            },
+            VkVertexInputAttributeDescription {
+                location: 1,
+                binding: 0,
+                format: VkFormat::VK_FORMAT_R32G32B32_SFLOAT,
+                offset: std::mem::size_of::<Vec3>() as u32,
+            },
+        ];
+        let vertex_input_state = VkPipelineVertexInputStateCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            vertexBindingDescriptionCount: 1,
+            pVertexBindingDescriptions: &vertex_input_binding,
+            vertexAttributeDescriptionCount: vertex_input_attributes.len() as u32,
+            pVertexAttributeDescriptions: vertex_input_attributes.as_ptr(),
+        };
+        // shaders
+        let vertex_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.vert.spv")).unwrap();
+        let fragment_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.frag.spv")).unwrap();
+        let shader_entry_point = CString::new("main").unwrap();
+        let shader_stages = vec![
+            VkPipelineShaderStageCreateInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                stage: VkShaderStageFlagBits::VK_SHADER_STAGE_VERTEX_BIT,
+                module: vertex_shader_module.handle(),
+                pName: shader_entry_point.as_ptr(),
+                pSpecializationInfo: ptr::null(),
+            },
+            VkPipelineShaderStageCreateInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                stage: VkShaderStageFlagBits::VK_SHADER_STAGE_FRAGMENT_BIT,
+                module: fragment_shader_module.handle(),
+                pName: shader_entry_point.as_ptr(),
+                pSpecializationInfo: ptr::null(),
+            },
+        ];
+        // pipeline
+        let create_info = VkGraphicsPipelineCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            stageCount: shader_stages.len() as u32,
+            pStages: shader_stages.as_ptr(),
+            pVertexInputState: &vertex_input_state,
+            pInputAssemblyState: &input_assembly_state,
+            pTessellationState: ptr::null(),
+            pViewportState: &viewport_state,
+            pRasterizationState: &rasterization_state,
+            pMultisampleState: &multisampling_state,
+            pDepthStencilState: &depth_stencil_state,
+            pColorBlendState: &color_blend_state,
+            pDynamicState: &dynamic_state,
+            layout: layout.handle(),
+            renderPass: render_pass.handle(),
+            subpass: 0,
+            basePipelineHandle: ptr::null_mut(),
+            basePipelineIndex: 0,
+        };
+        let mut cache = MaybeUninit::<VkPipelineCache>::zeroed();
+        let cache_create_info = VkPipelineCacheCreateInfo::new();
+        vkCreatePipelineCache(device.handle(), &cache_create_info, ptr::null(), cache.as_mut_ptr())
+            .into_result()
+            .unwrap();
+        let cache = cache.assume_init();
+        let mut handle = MaybeUninit::<VkPipeline>::zeroed();
+        vkCreateGraphicsPipelines(device.handle(), cache, 1, &create_info, ptr::null(), handle.as_mut_ptr())
+            .into_result()
+            .unwrap();
+        let handle = handle.assume_init();
+        let pipeline = OffscreenGraphicsPipeline {
+            render_pass: Arc::clone(render_pass),
+            layout: Arc::clone(layout),
+            cache: cache,
+            handle: handle,
+        };
+        Ok(Arc::new(pipeline))
+    }
+
+    #[inline]
+    pub fn device(&self) -> &Arc<Device> {
+        self.render_pass.device()
+    }
+
+    #[inline]
+    pub fn render_pass(&self) -> &Arc<OffscreenRenderPass> {
+        &self.render_pass
+    }
+
+    #[inline]
+    pub fn handle(&self) -> VkPipeline {
+        self.handle
     }
 }

@@ -2608,6 +2608,14 @@ extern "C" {
         vertexOffset: i32,
         firstInstance: u32,
     );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdDraw.html
+    pub fn vkCmdDraw(
+        commandBuffer: VkCommandBuffer,
+        vertexCount: u32,
+        instanceCount: u32,
+        firstVertex: u32,
+        firstInstance: u32,
+    );
     // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdEndRenderPass.html
     pub fn vkCmdEndRenderPass(
         commandBuffer: VkCommandBuffer,
