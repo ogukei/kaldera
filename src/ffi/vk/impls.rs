@@ -8,7 +8,14 @@ use libc::{c_char, c_float, size_t, c_void};
 use std::ffi::{CStr, CString};
 use std::ptr;
 
-const VK_API_VERSION_1_1: u32 = 4198400;
+#[macro_export]
+macro_rules! vk_version {
+    ($major:expr, $minor:expr, $patch:expr) => {
+        (($major as u32) << 22) | (($minor as u32) << 12) | (($patch as u32) << 0)
+    }
+}
+
+const VK_API_VERSION_1_2: u32 = vk_version!(1, 2, 0);
 
 impl VkApplicationInfo {
     pub fn new(
@@ -24,7 +31,7 @@ impl VkApplicationInfo {
             applicationVersion: application_version,
             pEngineName: engine_name,
             engineVersion: engine_version,
-            apiVersion: VK_API_VERSION_1_1,
+            apiVersion: VK_API_VERSION_1_2,
         }
     }
 }
@@ -342,6 +349,26 @@ impl VkWriteDescriptorSet {
             descriptorType: descriptor_type,
             pImageInfo: ptr::null(),
             pBufferInfo: buffer_info,
+            pTexelBufferView: ptr::null(),
+        }
+    }
+
+    pub fn from_image(
+        dst_set: VkDescriptorSet, 
+        descriptor_type: VkDescriptorType,
+        dst_binding: u32,
+        image_info: *const VkDescriptorImageInfo,
+    ) -> Self {
+        VkWriteDescriptorSet {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            pNext: ptr::null(),
+            dstSet: dst_set,
+            dstBinding: dst_binding,
+            dstArrayElement: 0,
+            descriptorCount: 1,
+            descriptorType: descriptor_type,
+            pImageInfo: image_info,
+            pBufferInfo: ptr::null(),
             pTexelBufferView: ptr::null(),
         }
     }

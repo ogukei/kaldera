@@ -5,7 +5,9 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage};
-use super::swapchain::{SwapchainFramebuffers, RenderPass};
+use super::swapchain::{SwapchainFramebuffers, SceneRenderPass};
+use super::geometry::{Vec3, Vec4};
+use super::staging::VertexStagingBuffer;
 
 use std::ptr;
 use std::mem;
@@ -15,96 +17,87 @@ use std::sync::Arc;
 use std::io::Read;
 use std::ffi::CString;
 
-#[repr(C)]
-pub struct Vec4 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-    pub w: f32,
-}
-
-#[repr(C)]
-pub struct Vec3 {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-}
-
-#[repr(C)]
-pub struct Vertex {
-    pub coordinate: Vec3,
-    pub color: Vec3,
-}
-
-pub struct RenderStagingBuffer {
-    vertex_buffer: Arc<StagingBuffer>,
-    index_buffer: Arc<StagingBuffer>,
-    index_count: usize,
-}
-
-impl RenderStagingBuffer {
-    pub fn new(command_pool: &Arc<CommandPool>, vertices: Vec<Vertex>, indices: Vec<u32>) -> Arc<Self> {
-        let vertex_buffer_size = std::mem::size_of::<Vertex>() * vertices.len();
-        let vertex_buffer = StagingBuffer::new(
-            command_pool, 
-            StagingBufferUsage::Vertex, 
-            vertex_buffer_size as VkDeviceSize)
-            .unwrap();
-        let index_buffer_size = std::mem::size_of::<u32>() * indices.len();
-        let index_buffer = StagingBuffer::new(
-            command_pool, 
-            StagingBufferUsage::Index, 
-            index_buffer_size as VkDeviceSize)
-            .unwrap();
-        // transfer
-        vertex_buffer.write(vertices.as_ptr() as *const c_void, vertex_buffer_size);
-        index_buffer.write(indices.as_ptr() as *const c_void, index_buffer_size);
-        let buffer = RenderStagingBuffer {
-            vertex_buffer,
-            index_buffer,
-            index_count: indices.len(),
-        };
-        Arc::new(buffer)
-    }
-
-    #[inline]
-    pub fn vertex_buffer(&self) -> &Arc<StagingBuffer> {
-        &self.vertex_buffer
-    }
-
-    #[inline]
-    pub fn index_buffer(&self) -> &Arc<StagingBuffer> {
-        &self.index_buffer
-    }
-
-    #[inline]
-    pub fn index_count(&self) -> usize {
-        self.index_count
-    }
-}
-
-pub struct PipelineLayout {
+pub struct SceneGraphicsPipelineLayout {
     device: Arc<Device>,
     handle: VkPipelineLayout,
+    descriptor_pool: VkDescriptorPool,
+    descriptor_set_layout: VkDescriptorSetLayout,
+    descriptor_set: VkDescriptorSet,
 }
 
-impl PipelineLayout {
-    pub fn new(device: &Arc<Device>) -> Result<Arc<Self>> {
-        unsafe { Self::init(device) }
+impl SceneGraphicsPipelineLayout {
+    pub fn new(
+        device: &Arc<Device>, 
+        image_info: VkDescriptorImageInfo
+    ) -> Result<Arc<Self>> {
+        unsafe {
+            Self::init(device, image_info)
+        }
     }
 
-    unsafe fn init(device: &Arc<Device>) -> Result<Arc<Self>> {
+    unsafe fn init(device: &Arc<Device>, image_info: VkDescriptorImageInfo) -> Result<Arc<Self>> {
+        // Descriptor Pool
+        let mut descriptor_pool = MaybeUninit::<VkDescriptorPool>::zeroed();
+        {
+            let size = VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
+            let create_info = VkDescriptorPoolCreateInfo::new(1, 1, &size);
+            vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), descriptor_pool.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let descriptor_pool = descriptor_pool.assume_init();
+        // Descriptor Set Layout
+        let mut descriptor_set_layout = MaybeUninit::<VkDescriptorSetLayout>::zeroed();
+        {
+            let bindings = vec![
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_FRAGMENT_BIT as u32,
+                    0,
+                )
+            ];
+            let create_info = VkDescriptorSetLayoutCreateInfo::new(bindings.len() as u32, bindings.as_ptr());
+            vkCreateDescriptorSetLayout(device.handle(), &create_info, ptr::null(), descriptor_set_layout.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let descriptor_set_layout = descriptor_set_layout.assume_init();
+        // Pipeline Layout
         let mut handle = MaybeUninit::<VkPipelineLayout>::zeroed();
         {
-            let create_info = VkPipelineLayoutCreateInfo::new(0, ptr::null());
+            let create_info = VkPipelineLayoutCreateInfo::new(1, &descriptor_set_layout);
             vkCreatePipelineLayout(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
                 .into_result()
                 .unwrap();
         }
         let handle = handle.assume_init();
-        let layout = PipelineLayout {
+        // Instantiate
+        let mut descriptor_set = MaybeUninit::<VkDescriptorSet>::zeroed();
+        {
+            let alloc_info = VkDescriptorSetAllocateInfo::new(descriptor_pool, 1, &descriptor_set_layout);
+            vkAllocateDescriptorSets(device.handle(), &alloc_info, descriptor_set.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let descriptor_set = descriptor_set.assume_init();
+        // Write Descriptor
+        {
+            let write_sets = vec![
+                VkWriteDescriptorSet::from_image(
+                    descriptor_set, 
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 
+                    0,
+                    &image_info,
+                )
+            ];
+            vkUpdateDescriptorSets(device.handle(), write_sets.len() as u32, write_sets.as_ptr(), 0, ptr::null());
+        }
+        let layout = SceneGraphicsPipelineLayout {
             device: Arc::clone(device),
             handle,
+            descriptor_pool,
+            descriptor_set_layout,
+            descriptor_set,
         };
         Ok(Arc::new(layout))
     }
@@ -113,30 +106,38 @@ impl PipelineLayout {
     pub fn handle(&self) -> VkPipelineLayout {
         self.handle
     }
+
+    #[inline]
+    pub fn descriptor_set(&self) -> VkDescriptorSet {
+        self.descriptor_set
+    }
 }
 
-impl Drop for PipelineLayout {
+impl Drop for SceneGraphicsPipelineLayout {
     fn drop(&mut self) {
-        log_debug!("Drop PipelineLayout");
+        log_debug!("Drop SceneGraphicsPipelineLayout");
         unsafe {
-            vkDestroyPipelineLayout(self.device.handle(), self.handle, ptr::null());
+            let device = &self.device;
+            vkDestroyPipelineLayout(device.handle(), self.handle, ptr::null());
+            vkDestroyDescriptorSetLayout(device.handle(), self.descriptor_set_layout, ptr::null());
+            vkDestroyDescriptorPool(device.handle(), self.descriptor_pool, ptr::null());
         }
     }
 }
 
-pub struct GraphicsPipeline {
-    render_pass: Arc<RenderPass>,
-    layout: Arc<PipelineLayout>,
+pub struct SceneGraphicsPipeline {
+    render_pass: Arc<SceneRenderPass>,
+    layout: Arc<SceneGraphicsPipelineLayout>,
     cache: VkPipelineCache,
     handle: VkPipeline,
 }
 
-impl GraphicsPipeline {
-    pub fn new(render_pass: &Arc<RenderPass>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
+impl SceneGraphicsPipeline {
+    pub fn new(render_pass: &Arc<SceneRenderPass>, layout: &Arc<SceneGraphicsPipelineLayout>) -> Result<Arc<Self>> {
         unsafe { Self::init(render_pass, layout) }
     }
 
-    unsafe fn init(render_pass: &Arc<RenderPass>, layout: &Arc<PipelineLayout>) -> Result<Arc<Self>> {
+    unsafe fn init(render_pass: &Arc<SceneRenderPass>, layout: &Arc<SceneGraphicsPipelineLayout>) -> Result<Arc<Self>> {
         let device = render_pass.device();
         // input assembly
         let input_assembly_state = VkPipelineInputAssemblyStateCreateInfo {
@@ -231,38 +232,18 @@ impl GraphicsPipeline {
             alphaToCoverageEnable: VK_FALSE,
             alphaToOneEnable: VK_FALSE,
         };
-        // vertex input
-        let vertex_input_binding = VkVertexInputBindingDescription {
-            binding: 0,
-            stride: std::mem::size_of::<Vertex>() as u32,
-            inputRate: VkVertexInputRate::VK_VERTEX_INPUT_RATE_VERTEX,
-        };
-        let vertex_input_attributes = vec![
-            VkVertexInputAttributeDescription {
-                location: 0,
-                binding: 0,
-                format: VkFormat::VK_FORMAT_R32G32B32_SFLOAT,
-                offset: 0,
-            },
-            VkVertexInputAttributeDescription {
-                location: 1,
-                binding: 0,
-                format: VkFormat::VK_FORMAT_R32G32B32_SFLOAT,
-                offset: std::mem::size_of::<Vec3>() as u32,
-            },
-        ];
         let vertex_input_state = VkPipelineVertexInputStateCreateInfo {
             sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
             pNext: ptr::null(),
             flags: 0,
-            vertexBindingDescriptionCount: 1,
-            pVertexBindingDescriptions: &vertex_input_binding,
-            vertexAttributeDescriptionCount: vertex_input_attributes.len() as u32,
-            pVertexAttributeDescriptions: vertex_input_attributes.as_ptr(),
+            vertexBindingDescriptionCount: 0,
+            pVertexBindingDescriptions: ptr::null(),
+            vertexAttributeDescriptionCount: 0,
+            pVertexAttributeDescriptions: ptr::null(),
         };
         // shaders
-        let vertex_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.vert.spv")).unwrap();
-        let fragment_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.frag.spv")).unwrap();
+        let vertex_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/fullscreen.vert.spv")).unwrap();
+        let fragment_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/fullscreen.frag.spv")).unwrap();
         let shader_entry_point = CString::new("main").unwrap();
         let shader_stages = vec![
             VkPipelineShaderStageCreateInfo {
@@ -317,7 +298,7 @@ impl GraphicsPipeline {
             .into_result()
             .unwrap();
         let handle = handle.assume_init();
-        let pipeline = GraphicsPipeline {
+        let pipeline = SceneGraphicsPipeline {
             render_pass: Arc::clone(render_pass),
             layout: Arc::clone(layout),
             cache: cache,
@@ -332,7 +313,7 @@ impl GraphicsPipeline {
     }
 
     #[inline]
-    pub fn render_pass(&self) -> &Arc<RenderPass> {
+    pub fn render_pass(&self) -> &Arc<SceneRenderPass> {
         &self.render_pass
     }
 
@@ -340,11 +321,16 @@ impl GraphicsPipeline {
     pub fn handle(&self) -> VkPipeline {
         self.handle
     }
+
+    #[inline]
+    pub fn layout(&self) -> &Arc<SceneGraphicsPipelineLayout> {
+        &self.layout
+    }
 }
 
-impl Drop for GraphicsPipeline {
+impl Drop for SceneGraphicsPipeline {
     fn drop(&mut self) {
-        log_debug!("Drop GraphicsPipeline");
+        log_debug!("Drop SceneGraphicsPipeline");
         unsafe {
             let device = self.render_pass.device();
             vkDestroyPipelineCache(device.handle(), self.cache, ptr::null());

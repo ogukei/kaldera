@@ -18,6 +18,9 @@ pub enum Surface {
     Xcb(XcbSurface),
 }
 
+unsafe impl Send for Surface {}
+unsafe impl Sync for Surface {}
+
 impl Surface {
     pub fn handle(&self) -> VkSurfaceKHR {
         match self {

@@ -5,8 +5,10 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage};
-use super::swapchain::{SwapchainFramebuffers, Framebuffer, RenderPass};
-use super::pipeline::{GraphicsPipeline, RenderStagingBuffer};
+use super::swapchain::{SwapchainFramebuffers, SwapchainFramebuffer, SceneRenderPass};
+use super::pipeline::{SceneGraphicsPipeline};
+use super::staging::VertexStagingBuffer;
+use super::offscreen::{OffscreenFramebuffer, OffscreenGraphicsPipeline};
 
 use std::ptr;
 use std::mem;
@@ -18,9 +20,11 @@ use std::ffi::CString;
 
 pub struct GraphicsRender {
     frames: Vec<GraphicsFrameRender>,
-    framebuffers: Arc<SwapchainFramebuffers>,
-    pipeline: Arc<GraphicsPipeline>,
-    staging_buffer: Arc<RenderStagingBuffer>,
+    swapchain_framebuffers: Arc<SwapchainFramebuffers>,
+    offscreen_framebuffer: Arc<OffscreenFramebuffer>,
+    offscreen_pipeline: Arc<OffscreenGraphicsPipeline>,
+    scene_pipeline: Arc<SceneGraphicsPipeline>,
+    staging_buffer: Arc<VertexStagingBuffer>,
     command_pool: Arc<CommandPool>,
     present_semaphore: Arc<Semaphore>,
     render_semaphore: Arc<Semaphore>,
@@ -28,41 +32,56 @@ pub struct GraphicsRender {
 
 impl GraphicsRender {
     pub fn new(
-        framebuffers: &Arc<SwapchainFramebuffers>, 
-        pipeline: &Arc<GraphicsPipeline>,
-        staging_buffer: &Arc<RenderStagingBuffer>,
-        command_pool: &Arc<CommandPool>,
+        command_pool: &Arc<CommandPool>, 
+        swapchain_framebuffers: &Arc<SwapchainFramebuffers>, 
+        offscreen_framebuffer: &Arc<OffscreenFramebuffer>,
+        offscreen_pipeline: &Arc<OffscreenGraphicsPipeline>,
+        scene_pipeline: &Arc<SceneGraphicsPipeline>,
+        staging_buffer: &Arc<VertexStagingBuffer>,
+        extent: VkExtent2D,
     ) -> Result<Arc<Self>> {
-        unsafe { Self::init(framebuffers, pipeline, staging_buffer, command_pool) }
+        unsafe {
+            Self::init(command_pool, swapchain_framebuffers, offscreen_framebuffer, offscreen_pipeline, scene_pipeline, staging_buffer, extent)
+        }
     }
 
-    unsafe fn init(
-        framebuffers: &Arc<SwapchainFramebuffers>, 
-        pipeline: &Arc<GraphicsPipeline>,
-        staging_buffer: &Arc<RenderStagingBuffer>,
-        command_pool: &Arc<CommandPool>,
+    pub unsafe fn init(
+        command_pool: &Arc<CommandPool>, 
+        swapchain_framebuffers: &Arc<SwapchainFramebuffers>, 
+        offscreen_framebuffer: &Arc<OffscreenFramebuffer>,
+        offscreen_pipeline: &Arc<OffscreenGraphicsPipeline>,
+        scene_pipeline: &Arc<SceneGraphicsPipeline>,
+        staging_buffer: &Arc<VertexStagingBuffer>,
+        extent: VkExtent2D
     ) -> Result<Arc<Self>> {
-        let device = framebuffers.device();
-        let render_pass = framebuffers.render_pass();
+        let device = swapchain_framebuffers.device();
         let area = VkRect2D {
             offset: VkOffset2D {
                 x: 0,
                 y: 0,
             },
-            extent: VkExtent2D {
-                width: 400,
-                height: 400,
-            },
+            extent: extent,
         };
+        let scene_render_pass = swapchain_framebuffers.render_pass();
         let frame_renders: Result<Vec<GraphicsFrameRender>>;
-        frame_renders = framebuffers.framebuffers()
+        frame_renders = swapchain_framebuffers.framebuffers()
             .iter()
-            .map(|framebuffer| GraphicsFrameRender::new(framebuffer, render_pass, command_pool, pipeline, staging_buffer, area))
+            .map(|framebuffer| GraphicsFrameRender::new(
+                framebuffer,
+                command_pool,
+                offscreen_framebuffer, 
+                offscreen_pipeline,
+                scene_render_pass,
+                scene_pipeline,
+                staging_buffer, 
+                area))
             .collect();
         let render = GraphicsRender {
             frames: frame_renders?,
-            framebuffers: Arc::clone(framebuffers),
-            pipeline: Arc::clone(pipeline),
+            swapchain_framebuffers: Arc::clone(swapchain_framebuffers),
+            offscreen_framebuffer: Arc::clone(offscreen_framebuffer),
+            offscreen_pipeline: Arc::clone(offscreen_pipeline),
+            scene_pipeline: Arc::clone(scene_pipeline),
             staging_buffer: Arc::clone(staging_buffer),
             command_pool: Arc::clone(command_pool),
             present_semaphore: Semaphore::new(device)?,
@@ -72,7 +91,7 @@ impl GraphicsRender {
     }
 
     pub fn draw(&self) -> Result<()> {
-        let swapchain = self.framebuffers.swapchain();
+        let swapchain = self.swapchain_framebuffers.swapchain();
         let image = swapchain.acquire_next_image(self.present_semaphore.handle())?;
         let frame = self.frames.get(image.index())
             .ok_or_else(|| ErrorCode::RenderFrameNotFound)?;
@@ -94,51 +113,92 @@ struct GraphicsFrameRender {
 
 impl GraphicsFrameRender {
     unsafe fn new(
-        framebuffer: &Framebuffer, 
-        render_pass: &Arc<RenderPass>,
-        command_pool: &Arc<CommandPool>, 
-        pipeline: &Arc<GraphicsPipeline>,
-        staging_buffer: &Arc<RenderStagingBuffer>,
+        swapchain_framebuffer: &SwapchainFramebuffer, 
+        command_pool: &Arc<CommandPool>,
+        offscreen_framebuffer: &Arc<OffscreenFramebuffer>,
+        offscreen_pipeline: &Arc<OffscreenGraphicsPipeline>,
+        scene_render_pass: &Arc<SceneRenderPass>,
+        scene_pipeline: &Arc<SceneGraphicsPipeline>,
+        staging_buffer: &Arc<VertexStagingBuffer>,
         area: VkRect2D
     ) -> Result<Self> {
         let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
-            let clear_values = vec![
-                VkClearValue {
-                    values: [0.0, 0.0, 0.2, 1.0],
-                },
-                VkClearValue {
-                    values: [1.0, 0.0, 0.0, 0.0],
-                },
-            ];
-            let render_pass_begin_info = VkRenderPassBeginInfo {
-                sType: VkStructureType::VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-                pNext: ptr::null(),
-                renderPass: render_pass.handle(),
-                framebuffer: framebuffer.handle(),
-                renderArea: area,
-                clearValueCount: clear_values.len() as u32,
-                pClearValues: clear_values.as_ptr(),
-            };
-            vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
-            let viewport = VkViewport {
-                x: 0.0,
-                y: 0.0,
-                width: area.extent.width as c_float,
-                height: area.extent.height as c_float,
-                minDepth: 0.0,
-                maxDepth: 1.0,
-            };
-            vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-            let scissor = area;
-            vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-            vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle());
-            let offset: VkDeviceSize = 0;
-            let vertex_buffer: VkBuffer = staging_buffer.vertex_buffer().device_buffer_memory().buffer();
-            vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer, &offset);
-            let index_buffer: VkBuffer = staging_buffer.index_buffer().device_buffer_memory().buffer();
-            vkCmdBindIndexBuffer(command_buffer, index_buffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
-            vkCmdDrawIndexed(command_buffer, staging_buffer.index_count() as u32, 1, 0, 0, 0);
-            vkCmdEndRenderPass(command_buffer);
+            {
+                let render_pass = offscreen_framebuffer.render_pass();
+                let clear_values = vec![
+                    VkClearValue {
+                        values: [0.0, 0.0, 0.2, 1.0],
+                    },
+                    VkClearValue {
+                        values: [1.0, 0.0, 0.0, 0.0],
+                    },
+                ];
+                let render_pass_begin_info = VkRenderPassBeginInfo {
+                    sType: VkStructureType::VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+                    pNext: ptr::null(),
+                    renderPass: render_pass.handle(),
+                    framebuffer: offscreen_framebuffer.handle(),
+                    renderArea: area,
+                    clearValueCount: clear_values.len() as u32,
+                    pClearValues: clear_values.as_ptr(),
+                };
+                vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
+                let viewport = VkViewport {
+                    x: 0.0,
+                    y: 0.0,
+                    width: area.extent.width as c_float,
+                    height: area.extent.height as c_float,
+                    minDepth: 0.0,
+                    maxDepth: 1.0,
+                };
+                vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+                let scissor = area;
+                vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+                vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS, offscreen_pipeline.handle());
+                let offset: VkDeviceSize = 0;
+                let vertex_buffer: VkBuffer = staging_buffer.vertex_buffer().device_buffer_memory().buffer();
+                vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer, &offset);
+                let index_buffer: VkBuffer = staging_buffer.index_buffer().device_buffer_memory().buffer();
+                vkCmdBindIndexBuffer(command_buffer, index_buffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
+                vkCmdDrawIndexed(command_buffer, staging_buffer.index_count() as u32, 1, 0, 0, 0);
+                vkCmdEndRenderPass(command_buffer);
+            }
+            {
+                let clear_values = vec![
+                    VkClearValue {
+                        values: [0.0, 0.0, 0.2, 1.0],
+                    },
+                    VkClearValue {
+                        values: [1.0, 0.0, 0.0, 0.0],
+                    },
+                ];
+                let render_pass_begin_info = VkRenderPassBeginInfo {
+                    sType: VkStructureType::VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+                    pNext: ptr::null(),
+                    renderPass: scene_render_pass.handle(),
+                    framebuffer: swapchain_framebuffer.handle(),
+                    renderArea: area,
+                    clearValueCount: clear_values.len() as u32,
+                    pClearValues: clear_values.as_ptr(),
+                };
+                vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
+                let viewport = VkViewport {
+                    x: 0.0,
+                    y: 0.0,
+                    width: area.extent.width as c_float,
+                    height: area.extent.height as c_float,
+                    minDepth: 0.0,
+                    maxDepth: 1.0,
+                };
+                vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+                let scissor = area;
+                vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+                vkCmdBindDescriptorSets(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS, 
+                    scene_pipeline.layout().handle(), 0, 1, &scene_pipeline.layout().descriptor_set(), 0, ptr::null());
+                vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS, scene_pipeline.handle());
+                vkCmdDraw(command_buffer, 3, 1, 0, 0);
+                vkCmdEndRenderPass(command_buffer);
+            }
         });
         let render = GraphicsFrameRender {
             command_buffer,
