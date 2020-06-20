@@ -4,7 +4,7 @@ use super::error::Result;
 use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
-use super::memory::{StagingBuffer, StagingBufferUsage};
+use super::memory::{StagingBuffer, StagingBufferUsage, DedicatedStagingBuffer};
 
 use std::ptr;
 use std::mem;

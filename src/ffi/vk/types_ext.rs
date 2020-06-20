@@ -10,6 +10,9 @@ pub type VkSurfaceTransformFlagsKHR = VkFlags;
 pub type VkCompositeAlphaFlagsKHR = VkFlags;
 pub type VkSwapchainCreateFlagsKHR = VkFlags;
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkDeviceAddress.html
+pub type VkDeviceAddress = u64;
+
 #[repr(C)]
 pub struct VkSurfaceKHROpaque { _private: [u8; 0] }
 pub type VkSurfaceKHR = *mut VkSurfaceKHROpaque;
@@ -152,7 +155,6 @@ pub struct VkPresentInfoKHR {
 
 #[link(name = "vulkan")]
 extern "C" {
-
     // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetPhysicalDeviceSurfaceCapabilitiesKHR.html
     pub fn vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
         physicalDevice: VkPhysicalDevice,
@@ -220,6 +222,12 @@ extern "C" {
         queue: VkQueue,
         pPresentInfo: *const VkPresentInfoKHR,
     ) -> VkResult;
+    // Provided by VK_VERSION_1_2
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetBufferDeviceAddressKHR.html
+    pub fn vkGetBufferDeviceAddress(
+        device: VkDevice,
+        pInfo: *const VkBufferDeviceAddressInfo,
+    ) -> VkDeviceAddress;
 }
 
 mod xcb {

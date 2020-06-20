@@ -12,6 +12,10 @@ use libc::{c_float, c_void};
 use std::sync::Arc;
 use std::io::Read;
 
+use VkBufferUsageFlagBits::*;
+use VkMemoryPropertyFlagBits::*;
+use VkPipelineStageFlagBits::*;
+
 pub struct BufferMemory {
     buffer: VkBuffer,
     memory: VkDeviceMemory,
@@ -32,22 +36,12 @@ impl BufferMemory {
                 .into_result()
                 .unwrap();
             let buffer = buffer.assume_init();
-            // physical memory properties
-            let mut memory_properties = MaybeUninit::<VkPhysicalDeviceMemoryProperties>::zeroed();
-            vkGetPhysicalDeviceMemoryProperties(device.physical_device().handle(), memory_properties.as_mut_ptr());
-            let memory_properties = memory_properties.assume_init();
             // requirements
             let mut requirements = MaybeUninit::<VkMemoryRequirements>::zeroed();
             vkGetBufferMemoryRequirements(device.handle(), buffer, requirements.as_mut_ptr());
             let requirements = requirements.assume_init();
-            // find a memory type index that fits the properties
-            let memory_type_bits = requirements.memoryTypeBits;
-            let memory_type_index = memory_properties.memoryTypes.iter()
-                .enumerate()
-                .filter(|(i,_)| ((memory_type_bits >> i) & 1) == 1)
-                .filter(|(_,v)| (v.propertyFlags & memory_property_flags) == memory_property_flags)
-                .nth(0)
-                .map(|(i,_)| i as u32)
+            let memory_type_index = device.physical_device()
+                .memory_type_index(&requirements, memory_property_flags)
                 .ok_or_else(|| ErrorCode::SuitableBufferMemoryTypeNotFound)
                 .unwrap();
             // allocation
@@ -208,19 +202,8 @@ impl ImageMemory {
             let mut requirements = MaybeUninit::<VkMemoryRequirements>::zeroed();
             vkGetImageMemoryRequirements(device.handle(), image, requirements.as_mut_ptr());
             let requirements = requirements.assume_init();
-            // physical memory properties
-            let mut memory_properties = MaybeUninit::<VkPhysicalDeviceMemoryProperties>::zeroed();
-            vkGetPhysicalDeviceMemoryProperties(device.physical_device().handle(), memory_properties.as_mut_ptr());
-            let memory_properties = memory_properties.assume_init();
-            // find a memory type index that fits the properties
-            let memory_property_flags = VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags;
-            let memory_type_bits = requirements.memoryTypeBits;
-            let memory_type_index = memory_properties.memoryTypes.iter()
-                .enumerate()
-                .filter(|(i,_)| ((memory_type_bits >> i) & 1) == 1)
-                .filter(|(_,v)| (v.propertyFlags & memory_property_flags) == memory_property_flags)
-                .nth(0)
-                .map(|(i,_)| i as u32)
+            let memory_type_index = device.physical_device()
+                .memory_type_index(&requirements, VkMemoryPropertyFlagBits::VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags)
                 .ok_or_else(|| ErrorCode::SuitableImageMemoryTypeNotFound)
                 .unwrap();
             // allocation
@@ -254,5 +237,203 @@ impl Drop for ImageMemory {
             vkFreeMemory(self.device.handle(), self.handle, ptr::null());
             self.handle = ptr::null_mut();
         }
+    }
+}
+
+pub struct DedicatedBufferMemory {
+    buffer: VkBuffer,
+    memory: VkDeviceMemory,
+    device: Arc<Device>,
+    whole_size: VkDeviceSize,
+}
+
+impl DedicatedBufferMemory {
+    pub fn new(device: &Arc<Device>, 
+        usage: VkBufferUsageFlags, 
+        memory_property_flags: VkMemoryPropertyFlags, 
+        size: VkDeviceSize) -> Result<Arc<Self>> {
+        unsafe {
+            // creates buffer
+            let mut buffer = MaybeUninit::<VkBuffer>::zeroed();
+            let buffer_create_info = VkBufferCreateInfo::new(size, usage, VkSharingMode::VK_SHARING_MODE_EXCLUSIVE);
+            vkCreateBuffer(device.handle(), &buffer_create_info, ptr::null(), buffer.as_mut_ptr())
+                .into_result()
+                .unwrap();
+            let buffer = buffer.assume_init();
+            // find memory requirements
+            let mut dedicated = MaybeUninit::<VkMemoryDedicatedRequirements>::zeroed();
+            {
+                let dedicated = dedicated.as_mut_ptr().as_mut().unwrap();
+                dedicated.sType = VkStructureType::VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS;
+            }
+            let mut requirements = MaybeUninit::<VkMemoryRequirements2>::zeroed();
+            {
+                let requirements = requirements.as_mut_ptr().as_mut().unwrap();
+                requirements.sType = VkStructureType::VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
+                requirements.pNext = dedicated.as_mut_ptr() as *mut _;
+            }
+            let requirements_info = VkBufferMemoryRequirementsInfo2 {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2,
+                pNext: ptr::null(),
+                buffer: buffer,
+            };
+            vkGetBufferMemoryRequirements2(device.handle(), &requirements_info, requirements.as_mut_ptr());
+            let requirements = requirements.assume_init();
+            // physical memory properties
+            let memory_type_index = device.physical_device()
+                .memory_type_index(&requirements.memoryRequirements, memory_property_flags)
+                .ok_or_else(|| ErrorCode::SuitableBufferMemoryTypeNotFound)
+                .unwrap();
+            // allocation
+            let mut memory = MaybeUninit::<VkDeviceMemory>::zeroed();
+            {
+                let use_device_address = (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags) 
+                    == VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags;
+                let allocate_flags = if use_device_address {
+                    VkMemoryAllocateFlagBits::VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT as VkMemoryAllocateFlags
+                } else {
+                    0 as VkMemoryAllocateFlags
+                };
+                let allocate_flags_info = VkMemoryAllocateFlagsInfo {
+                    sType: VkStructureType::VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+                    pNext: ptr::null(),
+                    flags: allocate_flags,
+                    deviceMask: 0,
+                };
+                let allocate_info = VkMemoryAllocateInfo {
+                    sType: VkStructureType::VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                    pNext: &allocate_flags_info as *const _ as *const c_void,
+                    allocationSize: requirements.memoryRequirements.size,
+                    memoryTypeIndex: memory_type_index,
+                };
+                vkAllocateMemory(device.handle(), &allocate_info, ptr::null(), memory.as_mut_ptr())
+                    .into_result()
+                    .unwrap();
+            }
+            let memory = memory.assume_init();
+            // binding
+            vkBindBufferMemory(device.handle(), buffer, memory, 0)
+                .into_result()
+                .unwrap();
+            let buffer_memory = DedicatedBufferMemory { 
+                buffer: buffer,
+                memory: memory,
+                device: Arc::clone(device),
+                whole_size: size,
+            };
+            Ok(Arc::new(buffer_memory))
+        }
+    }
+
+    #[inline]
+    pub fn buffer(&self) -> VkBuffer {
+        self.buffer
+    }
+
+    #[inline]
+    pub fn memory(&self) -> VkDeviceMemory {
+        self.memory
+    }
+
+    #[inline]
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
+
+    pub fn buffer_device_address(&self) -> VkDeviceAddress {
+        unsafe {
+            let address_info = VkBufferDeviceAddressInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+                pNext: ptr::null(),
+                buffer: self.buffer(),
+            };
+            vkGetBufferDeviceAddress(self.device.handle(), &address_info)
+        }
+    }
+}
+
+impl Drop for DedicatedBufferMemory {
+    fn drop(&mut self) {
+        unsafe {
+            log_debug!("Drop DedicatedBufferMemory");
+            vkDestroyBuffer(self.device.handle(), self.buffer, ptr::null());
+            vkFreeMemory(self.device.handle(), self.memory, ptr::null());
+        }
+    }
+}
+
+pub struct DedicatedStagingBuffer {
+    command_pool: Arc<CommandPool>,
+    host_buffer_memory: Arc<DedicatedBufferMemory>,
+    device_buffer_memory: Arc<DedicatedBufferMemory>,
+    copying_command_buffer: Arc<CommandBuffer>,
+}
+
+impl DedicatedStagingBuffer {
+    pub fn new(command_pool: &Arc<CommandPool>, 
+    device_buffer_usage: VkBufferUsageFlags, 
+    device_memory_properties: VkMemoryPropertyFlags,
+    size: VkDeviceSize,
+) -> Result<Arc<Self>> {
+        unsafe {
+            let device = command_pool.queue().device();
+            let host_buffer_memory = DedicatedBufferMemory::new(
+                device,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT as VkBufferUsageFlags,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT as VkMemoryPropertyFlags
+                    | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT as VkMemoryPropertyFlags,
+                size,
+            )?;
+            let device_buffer_memory = DedicatedBufferMemory::new(
+                device,
+                device_buffer_usage
+                    | VK_BUFFER_USAGE_TRANSFER_DST_BIT as VkBufferUsageFlags,
+                device_memory_properties,
+                size,
+            )?;
+            let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
+                let copy_region = VkBufferCopy::new(0, size);
+                vkCmdCopyBuffer(
+                    command_buffer,
+                    host_buffer_memory.buffer(),
+                    device_buffer_memory.buffer(),
+                    1,
+                    &copy_region,
+                );
+            });
+            let staging_buffer = DedicatedStagingBuffer {
+                command_pool: Arc::clone(command_pool),
+                host_buffer_memory,
+                device_buffer_memory,
+                copying_command_buffer: command_buffer,
+            };
+            Ok(Arc::new(staging_buffer))
+        }
+    }
+
+    pub fn write(&self, src: *const c_void, size: usize) {
+        unsafe {
+            let device = self.command_pool.queue().device();
+            let host_buffer_memory = &self.host_buffer_memory;
+            let mut mapped = MaybeUninit::<*mut c_void>::zeroed();
+            vkMapMemory(device.handle(), host_buffer_memory.memory(), 0, size as VkDeviceSize, 0, mapped.as_mut_ptr())
+                .into_result()
+                .unwrap();
+            let mapped = mapped.assume_init();
+            std::ptr::copy_nonoverlapping(src, mapped, size);
+            vkUnmapMemory(device.handle(), host_buffer_memory.memory());
+            self.copying_command_buffer
+                .submit_then_wait(VK_PIPELINE_STAGE_TRANSFER_BIT as VkPipelineStageFlags);
+        }
+    }
+
+    #[inline]
+    pub fn host_buffer_memory(&self) -> &Arc<DedicatedBufferMemory> {
+        &self.host_buffer_memory
+    }
+
+    #[inline]
+    pub fn device_buffer_memory(&self) -> &Arc<DedicatedBufferMemory> {
+        &self.device_buffer_memory
     }
 }

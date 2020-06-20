@@ -201,6 +201,11 @@ impl CommandBuffer {
             Ok(())
         }
     }
+
+    #[inline]
+    pub fn handle(&self) -> VkCommandBuffer {
+        self.handle
+    }
 }
 
 impl Drop for CommandBuffer {
@@ -246,6 +251,23 @@ impl Queue {
     #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
+    }
+
+    pub unsafe fn submit_then_wait(&self, command_buffers: &[VkCommandBuffer]) -> Result<()> {
+        let submit_info = VkSubmitInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            pNext: ptr::null(),
+            waitSemaphoreCount: 0,
+            pWaitSemaphores: ptr::null(),
+            pWaitDstStageMask: ptr::null(),
+            commandBufferCount: command_buffers.len() as u32,
+            pCommandBuffers: command_buffers.as_ptr(),
+            signalSemaphoreCount: 0,
+            pSignalSemaphores: ptr::null(),
+        };
+        vkQueueSubmit(self.handle(), 1, &submit_info, ptr::null_mut());
+        vkQueueWaitIdle(self.handle())
+            .into_result()
     }
 }
 

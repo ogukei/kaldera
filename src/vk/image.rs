@@ -25,6 +25,7 @@ pub struct ColorImage {
 }
 
 impl ColorImage {
+    // NOTE: has VK_IMAGE_USAGE_STORAGE_BIT
     pub unsafe fn new(device: &Arc<Device>, extent: VkExtent3D) -> Result<Arc<Self>> {
         let format = VkFormat::VK_FORMAT_R8G8B8A8_UNORM;
         // image

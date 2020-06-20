@@ -28,6 +28,7 @@ mod swapchain;
 mod pipeline;
 mod render;
 mod offscreen;
+mod raytrace;
 
 pub use error::*;
 pub use instance::*;
@@ -44,3 +45,4 @@ pub use swapchain::*;
 pub use pipeline::*;
 pub use render::*;
 pub use offscreen::*;
+pub use raytrace::*;

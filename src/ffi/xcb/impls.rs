@@ -89,7 +89,7 @@ impl XcbWindow {
             screen.root_visual,
             value_mask,
             value_list.as_ptr() as *const c_void);
-        Self::change_title_property(conn, window, CString::new("Karst").unwrap());
+        Self::change_title_property(conn, window, CString::new("Kaldera").unwrap());
         xcb_map_window(conn, window);
         XcbWindow {
             connection: Arc::clone(connection),

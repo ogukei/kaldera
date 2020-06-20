@@ -45,6 +45,7 @@ impl DeviceQueuesBuilder {
         let extension_names = vec![
             CString::new("VK_KHR_swapchain").unwrap(),
             CString::new("VK_KHR_ray_tracing").unwrap(),
+            CString::new("VK_KHR_dedicated_allocation").unwrap(),
         ];
         let extension_name_ptrs: Vec<*const c_char> = extension_names.iter()
             .map(|v| v.as_ptr())
