@@ -11,13 +11,14 @@ use super::types_ext::*;
 
 pub type VkGeometryFlagsKHR = VkFlags;
 pub type VkBuildAccelerationStructureFlagsKHR = VkFlags;
+pub type VkGeometryInstanceFlagsKHR = VkFlags;
 
 #[repr(C)]
 pub struct VkAccelerationStructureKHROpaque { _private: [u8; 0] }
 pub type VkAccelerationStructureKHR = *mut VkAccelerationStructureKHROpaque;
 
 #[repr(C)]
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum VkStructureTypeExtRay {
     VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_KHR = 1000165006,
     VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR = 1000165007,
@@ -95,13 +96,32 @@ pub struct VkAccelerationStructureGeometryKHR {
     pub sType: VkStructureTypeExtRay,
     pub pNext: *const c_void,
     pub geometryType: VkGeometryTypeKHR,
-    // union: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureGeometryDataKHR.html
-    pub geometry: VkAccelerationStructureGeometryTrianglesDataKHR,
+    pub geometry: VkAccelerationStructureGeometryDataKHR,
     pub flags: VkGeometryFlagsKHR,
 }
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureGeometryDataKHR.html
 #[repr(C)]
+#[derive(Clone, Copy)]
+pub union VkAccelerationStructureGeometryDataKHR {
+    pub triangles: VkAccelerationStructureGeometryTrianglesDataKHR,
+    pub aabbs: VkAccelerationStructureGeometryAabbsDataKHR,
+    pub instances: VkAccelerationStructureGeometryInstancesDataKHR,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureGeometryInstancesDataKHR.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct VkAccelerationStructureGeometryInstancesDataKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *const c_void,
+    pub arrayOfPointers: VkBool32,
+    pub data: VkDeviceAddress,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureGeometryDataKHR.html
+#[repr(C)]
+#[derive(Clone, Copy)]
 pub struct VkAccelerationStructureGeometryTrianglesDataKHR {
     pub sType: VkStructureTypeExtRay,
     pub pNext: *const c_void,
@@ -111,6 +131,16 @@ pub struct VkAccelerationStructureGeometryTrianglesDataKHR {
     pub indexType: VkIndexType,
     pub indexData: VkDeviceAddress,
     pub transformData: VkDeviceAddress,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureGeometryAabbsDataKHR.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct VkAccelerationStructureGeometryAabbsDataKHR {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub data: VkDeviceAddress,
+    pub stride: VkDeviceSize,
 }
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureTypeKHR.html
@@ -213,6 +243,38 @@ pub struct VkAccelerationStructureBuildGeometryInfoKHR {
     pub scratchData: VkDeviceAddress,
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkTransformMatrixKHR.html
+#[repr(C)]
+pub struct VkTransformMatrixKHR {
+    pub matrix: [[c_float; 4]; 3],
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureInstanceKHR.html
+#[repr(C)]
+pub struct VkAccelerationStructureInstanceKHR {
+    pub transform: VkTransformMatrixKHR,
+    pub instanceCustomIndexAndMask: u32,
+    pub instanceShaderBindingTableRecordOffsetAndFlags: u32,
+    pub accelerationStructureReference: u64,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkGeometryInstanceFlagBitsKHR.html
+#[repr(C)]
+pub enum VkGeometryInstanceFlagBitsKHR {
+    VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR = 0x00000001,
+    VK_GEOMETRY_INSTANCE_TRIANGLE_FRONT_COUNTERCLOCKWISE_BIT_KHR = 0x00000002,
+    VK_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR = 0x00000004,
+    VK_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR = 0x00000008,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureDeviceAddressInfoKHR.html
+#[repr(C)]
+pub struct VkAccelerationStructureDeviceAddressInfoKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *const c_void,
+    pub accelerationStructure: VkAccelerationStructureKHR,
+}
+
 mod dispatch {
     use super::*;
 
@@ -313,6 +375,23 @@ mod dispatch {
             ) -> ();
             func = std::mem::transmute(addr);
             (func)(commandBuffer, infoCount, pInfos, ppOffsetInfos)
+        }
+    }
+
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetAccelerationStructureDeviceAddressKHR.html
+    pub fn vkGetAccelerationStructureDeviceAddressKHR(
+        device: VkDevice,
+        pInfo: *const VkAccelerationStructureDeviceAddressInfoKHR,
+    ) -> VkDeviceAddress {
+        const NAME: &str = "vkGetAccelerationStructureDeviceAddressKHR\0";
+        unsafe {
+            let addr = vkGetDeviceProcAddr(device, NAME.as_ptr() as *const c_char);
+            let func: extern fn (
+                VkDevice,
+                *const VkAccelerationStructureDeviceAddressInfoKHR,
+            ) -> VkDeviceAddress;
+            func = std::mem::transmute(addr);
+            (func)(device, pInfo)
         }
     }
 }

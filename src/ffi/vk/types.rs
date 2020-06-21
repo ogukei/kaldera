@@ -206,6 +206,7 @@ pub enum VkSharingMode {
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkStructureType.html
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub enum VkStructureType {
     VK_STRUCTURE_TYPE_APPLICATION_INFO = 0,
     VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO = 1,

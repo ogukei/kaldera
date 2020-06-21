@@ -77,18 +77,9 @@ fn main() {
 
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
     let vertices = vec![
-        Vertex {
-            coordinate: Vec3 { x: 1.0, y: 1.0, z: 0.0 },
-            color: Vec3 { x: 1.0, y: 0.0, z: 0.0 },
-        },
-        Vertex {
-            coordinate: Vec3 { x: -1.0, y: 1.0, z: 0.0 },
-            color: Vec3 { x: 0.0, y: 1.0, z: 0.0 },
-        },
-        Vertex {
-            coordinate: Vec3 { x: 0.0, y: -1.0, z: 0.0 },
-            color: Vec3 { x: 0.0, y: 0.0, z: 1.0 },
-        },
+        Vec3 { x: 1.0, y: 1.0, z: 0.0 },
+        Vec3 { x: -1.0, y: 1.0, z: 0.0 },
+        Vec3 { x: 0.0, y: -1.0, z: 0.0 },
     ];
     let indices = vec![
         0, 1, 2,
@@ -96,14 +87,16 @@ fn main() {
     let staging_buffer = AccelerationVertexStagingBuffer::new(&command_pool, vertices, indices);
     let geometry = BottomLevelAccelerationStructureGeometry::new(
         3, 
-        std::mem::size_of::<Vertex>() as VkDeviceSize, 
+        std::mem::size_of::<Vec3>() as VkDeviceSize, 
         staging_buffer.vertex_buffer().device_buffer_memory(),
         3,
         staging_buffer.index_buffer().device_buffer_memory(),
     )
         .unwrap();
     let geometries = vec![geometry];
-    let structure = BottomLevelAccelerationStructure::new(&command_pool, geometries)
+    let bottom_level_structure = BottomLevelAccelerationStructure::new(&command_pool, geometries)
+        .unwrap();
+    let top_level_structure = TopLevelAccelerationStructure::new(&command_pool, &bottom_level_structure)
         .unwrap();
     // let renderer = renderer(&device_queues, surface);
     for i in 0..100 {
