@@ -39,7 +39,7 @@ impl SceneGraphicsPipelineLayout {
         // Descriptor Pool
         let mut descriptor_pool = MaybeUninit::<VkDescriptorPool>::zeroed();
         {
-            let size = VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
+            let size = VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1);
             let create_info = VkDescriptorPoolCreateInfo::new(1, 1, &size);
             vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), descriptor_pool.as_mut_ptr())
                 .into_result()

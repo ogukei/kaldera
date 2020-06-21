@@ -98,6 +98,8 @@ fn main() {
         .unwrap();
     let top_level_structure = TopLevelAccelerationStructure::new(&command_pool, &bottom_level_structure)
         .unwrap();
+    let pipeline = RayTracingGraphicsPipeline::new(device_queues.device())
+        .unwrap();
     // let renderer = renderer(&device_queues, surface);
     for i in 0..100 {
         println!("frame {}", i);

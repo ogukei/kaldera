@@ -17,6 +17,8 @@ pub type VkGeometryInstanceFlagsKHR = VkFlags;
 pub struct VkAccelerationStructureKHROpaque { _private: [u8; 0] }
 pub type VkAccelerationStructureKHR = *mut VkAccelerationStructureKHROpaque;
 
+pub const VK_SHADER_UNUSED_KHR: u32 = !0u32;
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub enum VkStructureTypeExtRay {
@@ -51,6 +53,7 @@ pub enum VkStructureTypeExtRay {
     VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT = 1000158005,
     VK_STRUCTURE_TYPE_VALIDATION_CACHE_CREATE_INFO_EXT = 1000160000,
     VK_STRUCTURE_TYPE_SHADER_MODULE_VALIDATION_CACHE_CREATE_INFO_EXT = 1000160001,
+    VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR = 1000290000,
 }
 
 #[repr(C)]
@@ -275,6 +278,73 @@ pub struct VkAccelerationStructureDeviceAddressInfoKHR {
     pub accelerationStructure: VkAccelerationStructureKHR,
 }
 
+// @see https://khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkWriteDescriptorSetAccelerationStructureKHR.html
+#[repr(C)]
+pub struct VkWriteDescriptorSetAccelerationStructureKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *const c_void,
+    pub accelerationStructureCount: u32,
+    pub pAccelerationStructures: *const VkAccelerationStructureKHR,
+}
+
+// @see https://khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRayTracingShaderGroupTypeKHR.html
+#[repr(C)]
+pub enum VkRayTracingShaderGroupTypeKHR {
+    VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR = 0,
+    VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR = 1,
+    VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR = 2,
+}
+
+// @see https://khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRayTracingShaderGroupCreateInfoKHR.html
+#[repr(C)]
+pub struct VkRayTracingShaderGroupCreateInfoKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *const c_void,
+    pub r#type: VkRayTracingShaderGroupTypeKHR,
+    pub generalShader: u32,
+    pub closestHitShader: u32,
+    pub anyHitShader: u32,
+    pub intersectionShader: u32,
+    pub pShaderGroupCaptureReplayHandle: *const c_void,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPipelineLibraryCreateInfoKHR.html
+#[repr(C)]
+pub struct VkPipelineLibraryCreateInfoKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *const c_void,
+    pub libraryCount: u32,
+    pub pLibraries: *const VkPipeline,
+} 
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRayTracingPipelineInterfaceCreateInfoKHR.html
+#[repr(C)]
+pub struct VkRayTracingPipelineInterfaceCreateInfoKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *const c_void,
+    pub maxPayloadSize: u32,
+    pub maxAttributeSize: u32,
+    pub maxCallableSize: u32,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRayTracingPipelineCreateInfoKHR.html
+#[repr(C)]
+pub struct VkRayTracingPipelineCreateInfoKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *const c_void,
+    pub flags: VkPipelineCreateFlags,
+    pub stageCount: u32,
+    pub pStages: *const VkPipelineShaderStageCreateInfo,
+    pub groupCount: u32,
+    pub pGroups: *const VkRayTracingShaderGroupCreateInfoKHR,
+    pub maxRecursionDepth: u32,
+    pub libraries: VkPipelineLibraryCreateInfoKHR,
+    pub pLibraryInterface: *const VkRayTracingPipelineInterfaceCreateInfoKHR,
+    pub layout: VkPipelineLayout,
+    pub basePipelineHandle: VkPipeline,
+    pub basePipelineIndex: i32,
+}
+
 mod dispatch {
     use super::*;
 
@@ -392,6 +462,38 @@ mod dispatch {
             ) -> VkDeviceAddress;
             func = std::mem::transmute(addr);
             (func)(device, pInfo)
+        }
+    }
+
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateRayTracingPipelinesKHR.html
+    pub fn vkCreateRayTracingPipelinesKHR(
+        device: VkDevice,
+        pipelineCache: VkPipelineCache,
+        createInfoCount: u32,
+        pCreateInfos: *const VkRayTracingPipelineCreateInfoKHR,
+        pAllocator: *const VkAllocationCallbacks,
+        pPipelines: *mut VkPipeline,
+    ) -> VkResult {
+        const NAME: &str = "vkCreateRayTracingPipelinesKHR\0";
+        unsafe {
+            let addr = vkGetDeviceProcAddr(device, NAME.as_ptr() as *const c_char);
+            let func: extern fn (
+                VkDevice,
+                VkPipelineCache,
+                u32,
+                *const VkRayTracingPipelineCreateInfoKHR,
+                *const VkAllocationCallbacks,
+                *mut VkPipeline,
+            ) -> VkResult;
+            func = std::mem::transmute(addr);
+            (func)(
+                device,
+                pipelineCache,
+                createInfoCount,
+                pCreateInfos,
+                pAllocator,
+                pPipelines,
+            )
         }
     }
 }

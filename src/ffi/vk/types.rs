@@ -881,7 +881,7 @@ pub struct VkSubmitInfo {
     pub pSignalSemaphores: *const VkSemaphore,
 }
 
-// @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkDescriptorType.html
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkDescriptorType.html
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub enum VkDescriptorType {
@@ -897,8 +897,7 @@ pub enum VkDescriptorType {
     VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC = 9,
     VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT = 10,
     VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT = 1000138000,
-    VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV = 1000165000,
-    VK_DESCRIPTOR_TYPE_MAX_ENUM = 0x7FFFFFFF,
+    VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR = 1000165000,
 }
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkDescriptorPoolSize.html
@@ -1041,7 +1040,7 @@ pub enum VkImageLayout {
     VK_IMAGE_LAYOUT_MAX_ENUM = 0x7FFFFFFF
 }
 
-// @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkShaderStageFlagBits.html
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkShaderStageFlagBits.html
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub enum VkShaderStageFlagBits {
@@ -1053,12 +1052,12 @@ pub enum VkShaderStageFlagBits {
     VK_SHADER_STAGE_COMPUTE_BIT = 0x00000020,
     VK_SHADER_STAGE_ALL_GRAPHICS = 0x0000001F,
     VK_SHADER_STAGE_ALL = 0x7FFFFFFF,
-    VK_SHADER_STAGE_RAYGEN_BIT_NV = 0x00000100,
-    VK_SHADER_STAGE_ANY_HIT_BIT_NV = 0x00000200,
-    VK_SHADER_STAGE_CLOSEST_HIT_BIT_NV = 0x00000400,
-    VK_SHADER_STAGE_MISS_BIT_NV = 0x00000800,
-    VK_SHADER_STAGE_INTERSECTION_BIT_NV = 0x00001000,
-    VK_SHADER_STAGE_CALLABLE_BIT_NV = 0x00002000,
+    VK_SHADER_STAGE_RAYGEN_BIT_KHR = 0x00000100,
+    VK_SHADER_STAGE_ANY_HIT_BIT_KHR = 0x00000200,
+    VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR = 0x00000400,
+    VK_SHADER_STAGE_MISS_BIT_KHR = 0x00000800,
+    VK_SHADER_STAGE_INTERSECTION_BIT_KHR = 0x00001000,
+    VK_SHADER_STAGE_CALLABLE_BIT_KHR = 0x00002000,
     VK_SHADER_STAGE_TASK_BIT_NV = 0x00000040,
     VK_SHADER_STAGE_MESH_BIT_NV = 0x00000080,
 }

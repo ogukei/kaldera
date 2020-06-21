@@ -629,3 +629,227 @@ impl TopLevelAccelerationStructure {
         Ok(Arc::new(top_level_structure))
     }
 }
+
+
+pub struct RayTracingGraphicsPipeline {
+    device: Arc<Device>,
+    layout: VkPipelineLayout,
+    handle: VkPipeline,
+    descriptor_pool: VkDescriptorPool,
+    descriptor_set_layout: VkDescriptorSetLayout,
+}
+
+impl RayTracingGraphicsPipeline {
+    pub fn new(
+        device: &Arc<Device>,
+    ) -> Result<Arc<Self>> {
+        unsafe {
+            Self::init(device)
+        }
+    }
+
+    unsafe fn init(device: &Arc<Device>) -> Result<Arc<Self>> {
+        // Descriptor Pool
+        let mut descriptor_pool = MaybeUninit::<VkDescriptorPool>::zeroed();
+        {
+            let sizes = vec![
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
+            ];
+            let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr());
+            vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), descriptor_pool.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let descriptor_pool = descriptor_pool.assume_init();
+        // Descriptor Set Layout
+        let mut descriptor_set_layout = MaybeUninit::<VkDescriptorSetLayout>::zeroed();
+        {
+            let bindings = vec![
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32,
+                    0,
+                ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32,
+                    1,
+                ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32,
+                    2,
+                ),
+            ];
+            let create_info = VkDescriptorSetLayoutCreateInfo::new(bindings.len() as u32, bindings.as_ptr());
+            vkCreateDescriptorSetLayout(device.handle(), &create_info, ptr::null(), descriptor_set_layout.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let descriptor_set_layout = descriptor_set_layout.assume_init();
+        // Pipeline Layout
+        let mut pipeline_layout = MaybeUninit::<VkPipelineLayout>::zeroed();
+        {
+            let create_info = VkPipelineLayoutCreateInfo::new(1, &descriptor_set_layout);
+            vkCreatePipelineLayout(device.handle(), &create_info, ptr::null(), pipeline_layout.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let pipeline_layout = pipeline_layout.assume_init();
+        // Shader Stages
+        let raygen_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.raygen.rgen.spv")).unwrap();
+        let rmiss_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.miss.rmiss.spv")).unwrap();
+        let rchit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.closesthit.rchit.spv")).unwrap();
+        let shader_entry_point = CString::new("main").unwrap();
+        const INDEX_RAYGEN: u32 = 0;
+        const INDEX_MISS: u32 = 1;
+        const INDEX_CLOSEST_HIT: u32 = 2;
+        let shader_stages = vec![
+            VkPipelineShaderStageCreateInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                stage: VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR,
+                module: raygen_shader_module.handle(),
+                pName: shader_entry_point.as_ptr(),
+                pSpecializationInfo: ptr::null(),
+            },
+            VkPipelineShaderStageCreateInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                stage: VkShaderStageFlagBits::VK_SHADER_STAGE_MISS_BIT_KHR,
+                module: rmiss_shader_module.handle(),
+                pName: shader_entry_point.as_ptr(),
+                pSpecializationInfo: ptr::null(),
+            },
+            VkPipelineShaderStageCreateInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                stage: VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+                module: rchit_shader_module.handle(),
+                pName: shader_entry_point.as_ptr(),
+                pSpecializationInfo: ptr::null(),
+            },
+        ];
+        let shader_groups = vec![
+            VkRayTracingShaderGroupCreateInfoKHR {
+                sType: VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+                pNext: ptr::null(),
+                r#type: VkRayTracingShaderGroupTypeKHR::VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+                generalShader: INDEX_RAYGEN,
+                closestHitShader: VK_SHADER_UNUSED_KHR,
+                anyHitShader: VK_SHADER_UNUSED_KHR,
+                intersectionShader: VK_SHADER_UNUSED_KHR,
+                pShaderGroupCaptureReplayHandle: ptr::null(),
+            },
+            VkRayTracingShaderGroupCreateInfoKHR {
+                sType: VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+                pNext: ptr::null(),
+                r#type: VkRayTracingShaderGroupTypeKHR::VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+                generalShader: INDEX_MISS,
+                closestHitShader: VK_SHADER_UNUSED_KHR,
+                anyHitShader: VK_SHADER_UNUSED_KHR,
+                intersectionShader: VK_SHADER_UNUSED_KHR,
+                pShaderGroupCaptureReplayHandle: ptr::null(),
+            },
+            VkRayTracingShaderGroupCreateInfoKHR {
+                sType: VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+                pNext: ptr::null(),
+                r#type: VkRayTracingShaderGroupTypeKHR::VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
+                generalShader: VK_SHADER_UNUSED_KHR,
+                closestHitShader: INDEX_CLOSEST_HIT,
+                anyHitShader: VK_SHADER_UNUSED_KHR,
+                intersectionShader: VK_SHADER_UNUSED_KHR,
+                pShaderGroupCaptureReplayHandle: ptr::null(),
+            },
+        ];
+        let libraries = VkPipelineLibraryCreateInfoKHR {
+            sType: VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR,
+            pNext: ptr::null(),
+            libraryCount: 0,
+            pLibraries: ptr::null(),
+        };
+        let create_info = VkRayTracingPipelineCreateInfoKHR {
+            sType: VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR,
+            pNext: ptr::null(),
+            flags: 0,
+            stageCount: shader_stages.len() as u32,
+            pStages: shader_stages.as_ptr(),
+            groupCount: shader_groups.len() as u32,
+            pGroups: shader_groups.as_ptr(),
+            maxRecursionDepth: 1,
+            libraries: libraries,
+            pLibraryInterface: ptr::null(),
+            layout: pipeline_layout,
+            basePipelineHandle: ptr::null_mut(),
+            basePipelineIndex: 0,
+        };
+        let mut handle = MaybeUninit::<VkPipeline>::zeroed();
+        vkCreateRayTracingPipelinesKHR(device.handle(), ptr::null_mut(), 1, &create_info, ptr::null(), handle.as_mut_ptr())
+            .into_result()
+            .unwrap();
+        let handle = handle.assume_init();
+        let layout = RayTracingGraphicsPipeline {
+            device: Arc::clone(device),
+            layout: pipeline_layout,
+            handle,
+            descriptor_pool,
+            descriptor_set_layout,
+        };
+        Ok(Arc::new(layout))
+    }
+
+    #[inline]
+    pub fn layout(&self) -> VkPipelineLayout {
+        self.layout
+    }
+
+    #[inline]
+    pub fn handle(&self) -> VkPipeline {
+        self.handle
+    }
+
+    #[inline]
+    pub fn descriptor_set_layout(&self) -> VkDescriptorSetLayout {
+        self.descriptor_set_layout
+    }
+}
+
+impl Drop for RayTracingGraphicsPipeline {
+    fn drop(&mut self) {
+        log_debug!("Drop RayTracingGraphicsPipeline");
+        unsafe {
+            let device = &self.device;
+            vkDestroyPipelineLayout(device.handle(), self.layout, ptr::null());
+            vkDestroyDescriptorSetLayout(device.handle(), self.descriptor_set_layout, ptr::null());
+            vkDestroyDescriptorPool(device.handle(), self.descriptor_pool, ptr::null());
+            vkDestroyPipeline(device.handle(), self.handle, ptr::null());
+        }
+    }
+}
+
+        // // Descriptor Set
+        // let mut descriptor_set = MaybeUninit::<VkDescriptorSet>::zeroed();
+        // {
+        //     let alloc_info = VkDescriptorSetAllocateInfo::new(descriptor_pool, 1, &descriptor_set_layout);
+        //     vkAllocateDescriptorSets(device.handle(), &alloc_info, descriptor_set.as_mut_ptr())
+        //         .into_result()
+        //         .unwrap();
+        // }
+        // let descriptor_set = descriptor_set.assume_init();
+        // // Write Descriptor
+        // {
+        //     let write_sets = vec![
+        //         VkWriteDescriptorSet::from_image(
+        //             descriptor_set, 
+        //             VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 
+        //             0,
+        //             &image_info,
+        //         )
+        //     ];
+        //     vkUpdateDescriptorSets(device.handle(), write_sets.len() as u32, write_sets.as_ptr(), 0, ptr::null());
+        // }
