@@ -5,6 +5,7 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage, DedicatedBufferMemory, DedicatedStagingBuffer};
+use super::image::{StorageImage};
 
 use std::ptr;
 use std::mem;
@@ -628,6 +629,11 @@ impl TopLevelAccelerationStructure {
         };
         Ok(Arc::new(top_level_structure))
     }
+
+    #[inline]
+    pub fn handle(&self) -> VkAccelerationStructureKHR {
+        self.structure.handle()
+    }
 }
 
 
@@ -635,7 +641,6 @@ pub struct RayTracingGraphicsPipeline {
     device: Arc<Device>,
     layout: VkPipelineLayout,
     handle: VkPipeline,
-    descriptor_pool: VkDescriptorPool,
     descriptor_set_layout: VkDescriptorSetLayout,
 }
 
@@ -649,20 +654,6 @@ impl RayTracingGraphicsPipeline {
     }
 
     unsafe fn init(device: &Arc<Device>) -> Result<Arc<Self>> {
-        // Descriptor Pool
-        let mut descriptor_pool = MaybeUninit::<VkDescriptorPool>::zeroed();
-        {
-            let sizes = vec![
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
-            ];
-            let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr());
-            vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), descriptor_pool.as_mut_ptr())
-                .into_result()
-                .unwrap();
-        }
-        let descriptor_pool = descriptor_pool.assume_init();
         // Descriptor Set Layout
         let mut descriptor_set_layout = MaybeUninit::<VkDescriptorSetLayout>::zeroed();
         {
@@ -797,7 +788,6 @@ impl RayTracingGraphicsPipeline {
             device: Arc::clone(device),
             layout: pipeline_layout,
             handle,
-            descriptor_pool,
             descriptor_set_layout,
         };
         Ok(Arc::new(layout))
@@ -817,6 +807,11 @@ impl RayTracingGraphicsPipeline {
     pub fn descriptor_set_layout(&self) -> VkDescriptorSetLayout {
         self.descriptor_set_layout
     }
+
+    #[inline]
+    pub fn device(&self) -> &Arc<Device> {
+        &self.device
+    }
 }
 
 impl Drop for RayTracingGraphicsPipeline {
@@ -826,30 +821,166 @@ impl Drop for RayTracingGraphicsPipeline {
             let device = &self.device;
             vkDestroyPipelineLayout(device.handle(), self.layout, ptr::null());
             vkDestroyDescriptorSetLayout(device.handle(), self.descriptor_set_layout, ptr::null());
-            vkDestroyDescriptorPool(device.handle(), self.descriptor_pool, ptr::null());
             vkDestroyPipeline(device.handle(), self.handle, ptr::null());
         }
     }
 }
 
-        // // Descriptor Set
-        // let mut descriptor_set = MaybeUninit::<VkDescriptorSet>::zeroed();
-        // {
-        //     let alloc_info = VkDescriptorSetAllocateInfo::new(descriptor_pool, 1, &descriptor_set_layout);
-        //     vkAllocateDescriptorSets(device.handle(), &alloc_info, descriptor_set.as_mut_ptr())
-        //         .into_result()
-        //         .unwrap();
-        // }
-        // let descriptor_set = descriptor_set.assume_init();
-        // // Write Descriptor
-        // {
-        //     let write_sets = vec![
-        //         VkWriteDescriptorSet::from_image(
-        //             descriptor_set, 
-        //             VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 
-        //             0,
-        //             &image_info,
-        //         )
-        //     ];
-        //     vkUpdateDescriptorSets(device.handle(), write_sets.len() as u32, write_sets.as_ptr(), 0, ptr::null());
-        // }
+pub struct RayTracingDescriptors {
+    device: Arc<Device>,
+    pipeline: Arc<RayTracingGraphicsPipeline>,
+    acceleration_structure: Arc<TopLevelAccelerationStructure>,
+    storage_image: Arc<StorageImage>,
+    uniform_buffer: Arc<UniformBuffer>,
+    descriptor_pool: VkDescriptorPool,
+    descriptor_set: VkDescriptorSet,
+}
+
+impl RayTracingDescriptors {
+    pub fn new(
+        pipeline: &Arc<RayTracingGraphicsPipeline>, 
+        acceleration_structure: &Arc<TopLevelAccelerationStructure>,
+        storage_image: &Arc<StorageImage>,
+        uniform_buffer: &Arc<UniformBuffer>,
+    ) -> Result<Arc<Self>> {
+        unsafe {
+            Self::init(pipeline, acceleration_structure, storage_image, uniform_buffer)
+        }
+    }
+
+    unsafe fn init(
+        pipeline: &Arc<RayTracingGraphicsPipeline>, 
+        acceleration_structure: &Arc<TopLevelAccelerationStructure>,
+        storage_image: &Arc<StorageImage>,
+        uniform_buffer: &Arc<UniformBuffer>,
+    ) -> Result<Arc<Self>> {
+        let device = pipeline.device();
+        // Descriptor Pool
+        let mut descriptor_pool = MaybeUninit::<VkDescriptorPool>::zeroed();
+        {
+            let sizes = vec![
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
+            ];
+            let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr());
+            vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), descriptor_pool.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let descriptor_pool = descriptor_pool.assume_init();
+        // Allocate Descriptor Set
+        let mut descriptor_set = MaybeUninit::<VkDescriptorSet>::zeroed();
+        {
+            let descriptor_set_layout = pipeline.descriptor_set_layout();
+            let alloc_info = VkDescriptorSetAllocateInfo::new(descriptor_pool, 1, &descriptor_set_layout);
+            vkAllocateDescriptorSets(device.handle(), &alloc_info, descriptor_set.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let descriptor_set = descriptor_set.assume_init();
+        let acceleration_structure_handle = acceleration_structure.handle();
+        let write_acceleration_structure_info = VkWriteDescriptorSetAccelerationStructureKHR {
+            sType: VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+            pNext: ptr::null(),
+            accelerationStructureCount: 1,
+            pAccelerationStructures: &acceleration_structure_handle,
+        };
+        let write_acceleration_structure = VkWriteDescriptorSet {
+            sType: VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            pNext: &write_acceleration_structure_info as *const _ as *const c_void,
+            dstSet: descriptor_set,
+            dstBinding: 0,
+            dstArrayElement: 0,
+            descriptorCount: 1,
+            descriptorType: VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+            pImageInfo: ptr::null(),
+            pBufferInfo: ptr::null(),
+            pTexelBufferView: ptr::null(),
+        };
+        let write_image_info = VkDescriptorImageInfo {
+            sampler: ptr::null_mut(),
+            imageView: storage_image.view(),
+            imageLayout: VkImageLayout::VK_IMAGE_LAYOUT_GENERAL,
+        };
+        let write_image = VkWriteDescriptorSet::from_image(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            1,
+            &write_image_info);
+        let write_uniform_buffer_info = VkDescriptorBufferInfo {
+            buffer: uniform_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: uniform_buffer.device_buffer_memory().size(),
+        };
+        let write_uniform_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            2,
+            &write_uniform_buffer_info);
+        let write_descriptor_sets = vec![
+            write_acceleration_structure,
+            write_image,
+            write_uniform_buffer,
+        ];
+        vkUpdateDescriptorSets(device.handle(), 
+            write_descriptor_sets.len() as u32, 
+            write_descriptor_sets.as_ptr(), 
+            0, 
+            ptr::null());
+        let descriptors = Self {
+            device: Arc::clone(device),
+            pipeline: Arc::clone(pipeline),
+            acceleration_structure: Arc::clone(acceleration_structure),
+            storage_image: Arc::clone(storage_image),
+            uniform_buffer: Arc::clone(uniform_buffer),
+            descriptor_pool,
+            descriptor_set,
+        };
+        Ok(Arc::new(descriptors))
+    }
+
+    #[inline]
+    pub fn descriptor_set(&self) -> VkDescriptorSet {
+        self.descriptor_set
+    }
+}
+
+impl Drop for RayTracingDescriptors {
+    fn drop(&mut self) {
+        unsafe {
+            let device = &self.device;
+            vkDestroyDescriptorPool(device.handle(), self.descriptor_pool, ptr::null());
+        }
+    }
+}
+
+pub struct UniformBuffer {
+    staging_buffer: Arc<DedicatedStagingBuffer>,
+}
+
+impl UniformBuffer {
+    pub fn new<Model>(command_pool: &Arc<CommandPool>, model: Model) -> Result<Arc<Self>> {
+        unsafe {
+            Self::init(command_pool, model)
+        }
+    }
+
+    unsafe fn init<Model>(command_pool: &Arc<CommandPool>, model: Model) -> Result<Arc<Self>> {
+        let model_size = std::mem::size_of::<Model>();
+        let staging_buffer = DedicatedStagingBuffer::new(command_pool, 
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            model_size as VkDeviceSize,
+        )
+            .unwrap();
+        staging_buffer.write(&model as *const _ as *const c_void, model_size);
+        let uniform_buffer = UniformBuffer {
+            staging_buffer,
+        };
+        Ok(Arc::new(uniform_buffer))
+    }
+
+    #[inline]
+    pub fn device_buffer_memory(&self) -> &Arc<DedicatedBufferMemory> {
+        self.staging_buffer.device_buffer_memory()
+    }
+}

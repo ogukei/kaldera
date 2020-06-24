@@ -244,7 +244,7 @@ pub struct DedicatedBufferMemory {
     buffer: VkBuffer,
     memory: VkDeviceMemory,
     device: Arc<Device>,
-    whole_size: VkDeviceSize,
+    size: VkDeviceSize,
 }
 
 impl DedicatedBufferMemory {
@@ -319,7 +319,7 @@ impl DedicatedBufferMemory {
                 buffer: buffer,
                 memory: memory,
                 device: Arc::clone(device),
-                whole_size: size,
+                size: size,
             };
             Ok(Arc::new(buffer_memory))
         }
@@ -338,6 +338,11 @@ impl DedicatedBufferMemory {
     #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
+    }
+
+    #[inline]
+    pub fn size(&self) -> VkDeviceSize {
+        self.size
     }
 
     pub fn buffer_device_address(&self) -> VkDeviceAddress {
@@ -367,6 +372,7 @@ pub struct DedicatedStagingBuffer {
     host_buffer_memory: Arc<DedicatedBufferMemory>,
     device_buffer_memory: Arc<DedicatedBufferMemory>,
     copying_command_buffer: Arc<CommandBuffer>,
+    size: VkDeviceSize,
 }
 
 impl DedicatedStagingBuffer {
@@ -406,6 +412,7 @@ impl DedicatedStagingBuffer {
                 host_buffer_memory,
                 device_buffer_memory,
                 copying_command_buffer: command_buffer,
+                size,
             };
             Ok(Arc::new(staging_buffer))
         }
@@ -425,6 +432,21 @@ impl DedicatedStagingBuffer {
             self.copying_command_buffer
                 .submit_then_wait(VK_PIPELINE_STAGE_TRANSFER_BIT as VkPipelineStageFlags);
         }
+    }
+
+    pub unsafe fn update(&self, size: VkDeviceSize, func: impl FnOnce(*mut c_void)) {
+        assert_eq!(size, self.size);
+        let device = self.command_pool.queue().device();
+        let host_buffer_memory = &self.host_buffer_memory;
+        let mut mapped = MaybeUninit::<*mut c_void>::zeroed();
+        vkMapMemory(device.handle(), host_buffer_memory.memory(), 0, size, 0, mapped.as_mut_ptr())
+            .into_result()
+            .unwrap();
+        let mapped = mapped.assume_init();
+        func(mapped);
+        vkUnmapMemory(device.handle(), host_buffer_memory.memory());
+        self.copying_command_buffer
+            .submit_then_wait(VK_PIPELINE_STAGE_TRANSFER_BIT as VkPipelineStageFlags);
     }
 
     #[inline]

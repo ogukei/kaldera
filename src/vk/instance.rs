@@ -24,6 +24,7 @@ impl Instance {
         let extension_names: Vec<CString> = vec![
             CString::new("VK_KHR_surface").unwrap(),
             CString::new("VK_KHR_xcb_surface").unwrap(),
+            CString::new("VK_KHR_get_physical_device_properties2").unwrap(),
         ];
         let extension_name_ptrs = extension_names.iter()
             .map(|v| v.as_ptr())

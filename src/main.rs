@@ -100,6 +100,20 @@ fn main() {
         .unwrap();
     let pipeline = RayTracingGraphicsPipeline::new(device_queues.device())
         .unwrap();
+    let model = RayTracingUniformBuffer {
+        proj_inverse: Default::default(),
+        view_inverse: Default::default(),
+    };
+    let uniform_buffer = UniformBuffer::new(&command_pool, model)
+        .unwrap();
+    let extent = VkExtent2D {
+        width: 400,
+        height: 400,
+    };
+    let storage_image = StorageImage::new(&command_pool, extent)
+        .unwrap();
+    let descriptors = RayTracingDescriptors::new(&pipeline, &top_level_structure, &storage_image, &uniform_buffer)
+        .unwrap();
     // let renderer = renderer(&device_queues, surface);
     for i in 0..100 {
         println!("frame {}", i);

@@ -333,7 +333,7 @@ impl VkDescriptorBufferInfo {
 }
 
 impl VkWriteDescriptorSet {
-    pub fn new(
+    pub fn from_buffer(
         dst_set: VkDescriptorSet, 
         descriptor_type: VkDescriptorType,
         dst_binding: u32,
