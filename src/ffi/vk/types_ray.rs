@@ -345,6 +345,15 @@ pub struct VkRayTracingPipelineCreateInfoKHR {
     pub basePipelineIndex: i32,
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkStridedBufferRegionKHR.html
+#[repr(C)]
+pub struct VkStridedBufferRegionKHR {
+    pub buffer: VkBuffer,
+    pub offset: VkDeviceSize,
+    pub stride: VkDeviceSize,
+    pub size: VkDeviceSize,
+}
+
 mod dispatch {
     use super::*;
 
@@ -493,6 +502,77 @@ mod dispatch {
                 pCreateInfos,
                 pAllocator,
                 pPipelines,
+            )
+        }
+    }
+
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetRayTracingShaderGroupHandlesKHR.html
+    pub fn vkGetRayTracingShaderGroupHandlesKHR(
+        device: VkDevice,
+        pipeline: VkPipeline,
+        firstGroup: u32,
+        groupCount: u32,
+        dataSize: size_t,
+        pData: *mut c_void,
+    ) -> VkResult {
+        const NAME: &str = "vkGetRayTracingShaderGroupHandlesKHR\0";
+        unsafe {
+            let addr = vkGetDeviceProcAddr(device, NAME.as_ptr() as *const c_char);
+            let func: extern fn (
+                VkDevice,
+                VkPipeline,
+                u32,
+                u32,
+                size_t,
+                *mut c_void,
+            ) -> VkResult;
+            func = std::mem::transmute(addr);
+            (func)(
+                device,
+                pipeline,
+                firstGroup,
+                groupCount,
+                dataSize,
+                pData,
+            )
+        }
+    }
+
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdTraceRaysKHR.html
+    pub fn dispatch_vkCmdTraceRaysKHR(
+        device: VkDevice,
+        commandBuffer: VkCommandBuffer,
+        pRaygenShaderBindingTable: *const VkStridedBufferRegionKHR,
+        pMissShaderBindingTable: *const VkStridedBufferRegionKHR,
+        pHitShaderBindingTable: *const VkStridedBufferRegionKHR,
+        pCallableShaderBindingTable: *const VkStridedBufferRegionKHR,
+        width: u32,
+        height: u32,
+        depth: u32,
+    ) {
+        const NAME: &str = "vkCmdTraceRaysKHR\0";
+        unsafe {
+            let addr = vkGetDeviceProcAddr(device, NAME.as_ptr() as *const c_char);
+            let func: extern fn (
+                VkCommandBuffer,
+                *const VkStridedBufferRegionKHR,
+                *const VkStridedBufferRegionKHR,
+                *const VkStridedBufferRegionKHR,
+                *const VkStridedBufferRegionKHR,
+                u32,
+                u32,
+                u32,
+            ) -> ();
+            func = std::mem::transmute(addr);
+            (func)(
+                commandBuffer,
+                pRaygenShaderBindingTable,
+                pMissShaderBindingTable,
+                pHitShaderBindingTable,
+                pCallableShaderBindingTable,
+                width,
+                height,
+                depth,
             )
         }
     }

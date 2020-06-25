@@ -5,12 +5,12 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage, DedicatedBufferMemory, DedicatedStagingBuffer};
-use super::image::{StorageImage};
+use super::image::{ColorImage};
 
 use std::ptr;
 use std::mem;
 use std::mem::MaybeUninit;
-use libc::{c_float, c_void};
+use libc::{c_float, c_void, size_t};
 use std::sync::Arc;
 use std::io::Read;
 use std::ffi::CString;
@@ -826,21 +826,21 @@ impl Drop for RayTracingGraphicsPipeline {
     }
 }
 
-pub struct RayTracingDescriptors {
+pub struct RayTracingDescriptorSets {
     device: Arc<Device>,
     pipeline: Arc<RayTracingGraphicsPipeline>,
     acceleration_structure: Arc<TopLevelAccelerationStructure>,
-    storage_image: Arc<StorageImage>,
+    storage_image: Arc<ColorImage>,
     uniform_buffer: Arc<UniformBuffer>,
     descriptor_pool: VkDescriptorPool,
     descriptor_set: VkDescriptorSet,
 }
 
-impl RayTracingDescriptors {
+impl RayTracingDescriptorSets {
     pub fn new(
         pipeline: &Arc<RayTracingGraphicsPipeline>, 
         acceleration_structure: &Arc<TopLevelAccelerationStructure>,
-        storage_image: &Arc<StorageImage>,
+        storage_image: &Arc<ColorImage>,
         uniform_buffer: &Arc<UniformBuffer>,
     ) -> Result<Arc<Self>> {
         unsafe {
@@ -851,7 +851,7 @@ impl RayTracingDescriptors {
     unsafe fn init(
         pipeline: &Arc<RayTracingGraphicsPipeline>, 
         acceleration_structure: &Arc<TopLevelAccelerationStructure>,
-        storage_image: &Arc<StorageImage>,
+        storage_image: &Arc<ColorImage>,
         uniform_buffer: &Arc<UniformBuffer>,
     ) -> Result<Arc<Self>> {
         let device = pipeline.device();
@@ -939,12 +939,12 @@ impl RayTracingDescriptors {
     }
 
     #[inline]
-    pub fn descriptor_set(&self) -> VkDescriptorSet {
+    pub fn handle(&self) -> VkDescriptorSet {
         self.descriptor_set
     }
 }
 
-impl Drop for RayTracingDescriptors {
+impl Drop for RayTracingDescriptorSets {
     fn drop(&mut self) {
         unsafe {
             let device = &self.device;
@@ -982,5 +982,122 @@ impl UniformBuffer {
     #[inline]
     pub fn device_buffer_memory(&self) -> &Arc<DedicatedBufferMemory> {
         self.staging_buffer.device_buffer_memory()
+    }
+}
+
+pub struct ShaderBindingTable {
+    staging_buffer: Arc<DedicatedStagingBuffer>,
+    pipeline: Arc<RayTracingGraphicsPipeline>,
+}
+
+impl ShaderBindingTable {
+    pub fn new(command_pool: &Arc<CommandPool>, pipeline: &Arc<RayTracingGraphicsPipeline>) -> Result<Arc<Self>> {
+        unsafe {
+            Self::init(command_pool, pipeline)
+        }
+    }
+
+    unsafe fn init(command_pool: &Arc<CommandPool>, pipeline: &Arc<RayTracingGraphicsPipeline>) -> Result<Arc<Self>> {
+        let device = command_pool.queue().device();
+        let properties = device.physical_device().properties_ray_tracing();
+        let table_size = (properties.shaderGroupHandleSize * 3) as VkDeviceSize;
+        let staging_buffer = DedicatedStagingBuffer::new(command_pool, 
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT as VkBufferUsageFlags 
+                | VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            table_size)
+            .unwrap();
+        staging_buffer.update(table_size, |data| {
+            vkGetRayTracingShaderGroupHandlesKHR(device.handle(), pipeline.handle(), 0, 3, table_size as size_t, data)
+                .into_result()
+                .unwrap();
+        });
+        let table = Self {
+            staging_buffer,
+            pipeline: Arc::clone(pipeline),
+        };
+        Ok(Arc::new(table))
+    }
+
+    #[inline]
+    fn buffer(&self) -> VkBuffer {
+        self.staging_buffer.device_buffer_memory().buffer()
+    }
+}
+
+pub struct RayTracingGraphicsRender {
+    command_pool: Arc<CommandPool>,
+    pipeline: Arc<RayTracingGraphicsPipeline>,
+    descriptor_sets: Arc<RayTracingDescriptorSets>,
+    shader_binding_table: Arc<ShaderBindingTable>,
+    properties: Arc<VkPhysicalDeviceRayTracingPropertiesKHR>,
+}
+
+impl RayTracingGraphicsRender {
+    pub fn new(
+        command_pool: &Arc<CommandPool>, 
+        pipeline: &Arc<RayTracingGraphicsPipeline>,
+        descriptor_sets: &Arc<RayTracingDescriptorSets>,
+    ) -> Result<Arc<Self>> {
+        unsafe {
+            Self::init(command_pool, pipeline, descriptor_sets)
+        }
+    }
+
+    unsafe fn init(
+        command_pool: &Arc<CommandPool>, 
+        pipeline: &Arc<RayTracingGraphicsPipeline>,
+        descriptor_sets: &Arc<RayTracingDescriptorSets>,
+    ) -> Result<Arc<Self>> {
+        let shader_binding_table = ShaderBindingTable::new(command_pool, pipeline)
+            .unwrap();
+        let device = command_pool.queue().device();
+        let properties = device.physical_device().properties_ray_tracing();
+        let render = Self {
+            command_pool: Arc::clone(command_pool),
+            pipeline: Arc::clone(pipeline),
+            descriptor_sets: Arc::clone(descriptor_sets),
+            shader_binding_table,
+            properties: Arc::new(properties),
+        };
+        Ok(Arc::new(render))
+    }
+
+    pub unsafe fn command(&self, command_buffer: VkCommandBuffer, area: VkRect2D) {
+        let device = self.command_pool.queue().device();
+        let shader_binding_table = &self.shader_binding_table;
+        let handle_size = self.properties.shaderGroupHandleSize as VkDeviceSize;
+        let raygen_entry = VkStridedBufferRegionKHR {
+            buffer: shader_binding_table.buffer(),
+            offset: handle_size * 0,
+            stride: 0,
+            size: handle_size,
+        };
+        let miss_entry = VkStridedBufferRegionKHR {
+            buffer: shader_binding_table.buffer(),
+            offset: handle_size * 1,
+            stride: 0,
+            size: handle_size,
+        };
+        let hit_entry = VkStridedBufferRegionKHR {
+            buffer: shader_binding_table.buffer(),
+            offset: handle_size * 2,
+            stride: 0,
+            size: handle_size,
+        };
+        let callable_entry = VkStridedBufferRegionKHR::default();
+        let descriptor_set = self.descriptor_sets.handle();
+        vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, self.pipeline.handle());
+        vkCmdBindDescriptorSets(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+            self.pipeline.layout(), 0, 1, &descriptor_set, 0, ptr::null());
+        dispatch_vkCmdTraceRaysKHR(device.handle(), 
+            command_buffer, 
+            &raygen_entry, 
+            &miss_entry, 
+            &hit_entry, 
+            &callable_entry, 
+            area.extent.width, 
+            area.extent.height, 
+            1);
     }
 }

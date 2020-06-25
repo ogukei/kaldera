@@ -140,6 +140,35 @@ impl ColorImage {
     pub fn sampler(&self) -> VkSampler {
         self.sampler
     }
+
+    pub unsafe fn command_barrier_initial_layout(&self, command_buffer: VkCommandBuffer) {
+        let subresource_range = VkImageSubresourceRange {
+            aspectMask: VkImageAspectFlagBits::VK_IMAGE_ASPECT_COLOR_BIT as VkImageAspectFlags,
+            baseMipLevel: 0,
+            levelCount: 1,
+            baseArrayLayer: 0,
+            layerCount: 1,
+        };
+        let image_memory_barrier = VkImageMemoryBarrier {
+            sType: VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            pNext: ptr::null(),
+            srcAccessMask: 0 as VkAccessFlags,
+            dstAccessMask: 0 as VkAccessFlags,
+            oldLayout: VkImageLayout::VK_IMAGE_LAYOUT_UNDEFINED,
+            newLayout: VkImageLayout::VK_IMAGE_LAYOUT_GENERAL,
+            srcQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
+            dstQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
+            image: self.image,
+            subresourceRange: subresource_range,
+        };
+        vkCmdPipelineBarrier(command_buffer,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT as VkPipelineStageFlags, 
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT as VkPipelineStageFlags, 
+            0 as VkDependencyFlags, 
+            0, ptr::null(), 
+            0, ptr::null(), 
+            1, &image_memory_barrier);
+    }
 }
 
 impl Drop for ColorImage {
@@ -237,119 +266,11 @@ impl DepthStencilImage {
     pub fn image_format(&self) -> VkFormat {
         self.image_format
     }
-}
 
-impl Drop for DepthStencilImage {
-    fn drop(&mut self) {
-        log_debug!("Drop DepthStencilImage");
-        unsafe {
-            let device = &self.device;
-            vkDestroyImageView(device.handle(), self.view, std::ptr::null());
-            // TODO(?): ImageMemory timing
-            vkDestroyImage(device.handle(), self.image, std::ptr::null());
-        }
-    }
-}
-
-pub struct StorageImage {
-    device: Arc<Device>,
-    image: VkImage,
-    view: VkImageView,
-    memory: Arc<ImageMemory>,
-    image_format: VkFormat,
-}
-
-impl StorageImage {
-    pub fn new(command_pool: &Arc<CommandPool>, extent: VkExtent2D) -> Result<Arc<Self>> {
-        unsafe {
-            Self::init(command_pool, extent)
-        }
-    }
-
-    unsafe fn init(command_pool: &Arc<CommandPool>, extent: VkExtent2D) -> Result<Arc<Self>> {
-        let device = command_pool.queue().device();
-        let format = VkFormat::VK_FORMAT_R8G8B8A8_UNORM;
-        let extent = VkExtent3D {
-            width: extent.width,
-            height: extent.height,
-            depth: 1,
-        };
-        // image
-        let mut image_handle = MaybeUninit::<VkImage>::zeroed();
-        {
-            let create_info = VkImageCreateInfo {
-                sType: VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-                pNext: std::ptr::null(),
-                flags: 0,
-                imageType: VkImageType::VK_IMAGE_TYPE_2D,
-                format: format,
-                extent: extent,
-                mipLevels: 1,
-                arrayLayers: 1,
-                samples: VK_SAMPLE_COUNT_1_BIT,
-                tiling: VkImageTiling::VK_IMAGE_TILING_OPTIMAL,
-                usage: VK_IMAGE_USAGE_TRANSFER_SRC_BIT as VkImageUsageFlags 
-                    | VK_IMAGE_USAGE_STORAGE_BIT as VkImageUsageFlags,
-                sharingMode: VkSharingMode::VK_SHARING_MODE_EXCLUSIVE,
-                queueFamilyIndexCount: 0,
-                pQueueFamilyIndices: ptr::null(),
-                initialLayout: VkImageLayout::VK_IMAGE_LAYOUT_UNDEFINED,
-            };
-            vkCreateImage(device.handle(), &create_info, std::ptr::null(), image_handle.as_mut_ptr())
-                .into_result()
-                .unwrap();
-        }
-        let image_handle = image_handle.assume_init();
-        // memory
-        let image_memory = ImageMemory::new(device, image_handle)?;
-        // view
-        let mut view_handle = MaybeUninit::<VkImageView>::zeroed();
-        {
-            let create_info = VkImageViewCreateInfo {
-                sType: VkStructureType::VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                pNext: std::ptr::null(),
-                flags: 0,
-                image: image_handle,
-                viewType: VkImageViewType::VK_IMAGE_VIEW_TYPE_2D,
-                format: format,
-                components: VkComponentMapping::default(),
-                subresourceRange: VkImageSubresourceRange {
-                    aspectMask: VkImageAspectFlagBits::VK_IMAGE_ASPECT_COLOR_BIT as VkImageAspectFlags,
-                    baseMipLevel: 0,
-                    levelCount: 1,
-                    baseArrayLayer: 0,
-                    layerCount: 1,
-                },
-            };
-            vkCreateImageView(device.handle(), &create_info, ptr::null(), view_handle.as_mut_ptr())
-                .into_result()
-                .unwrap();
-        }
-        let view_handle = view_handle.assume_init();
-        let image = Self {
-            device: Arc::clone(device),
-            image: image_handle,
-            view: view_handle,
-            memory: image_memory,
-            image_format: format,
-        };
-        image.barrier_initial_layout(command_pool);
-        Ok(Arc::new(image))
-    }
-
-    #[inline]
-    pub fn view(&self) -> VkImageView {
-        self.view
-    }
-
-    #[inline]
-    pub fn image_format(&self) -> VkFormat {
-        self.image_format
-    }
-
-    fn barrier_initial_layout(&self, command_pool: &Arc<CommandPool>) {
+    pub unsafe fn command_barrier_initial_layout(&self, command_buffer: VkCommandBuffer) {
         let subresource_range = VkImageSubresourceRange {
-            aspectMask: VkImageAspectFlagBits::VK_IMAGE_ASPECT_COLOR_BIT as VkImageAspectFlags,
+            aspectMask: VkImageAspectFlagBits::VK_IMAGE_ASPECT_DEPTH_BIT as VkImageAspectFlags 
+                | VkImageAspectFlagBits::VK_IMAGE_ASPECT_STENCIL_BIT as VkImageAspectFlags,
             baseMipLevel: 0,
             levelCount: 1,
             baseArrayLayer: 0,
@@ -361,36 +282,29 @@ impl StorageImage {
             srcAccessMask: 0 as VkAccessFlags,
             dstAccessMask: 0 as VkAccessFlags,
             oldLayout: VkImageLayout::VK_IMAGE_LAYOUT_UNDEFINED,
-            newLayout: VkImageLayout::VK_IMAGE_LAYOUT_GENERAL,
+            newLayout: VkImageLayout::VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR,
             srcQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
             dstQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
             image: self.image,
             subresourceRange: subresource_range,
         };
-        unsafe {
-            let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
-                vkCmdPipelineBarrier(command_buffer,
-                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT as VkPipelineStageFlags, 
-                     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT as VkPipelineStageFlags, 
-                     0 as VkDependencyFlags, 
-                     0, ptr::null(), 
-                     0, ptr::null(), 
-                     1, &image_memory_barrier);
-            });
-            let command_buffers = vec![command_buffer.handle()];
-            command_pool.queue()
-                .submit_then_wait(&command_buffers)
-                .unwrap();
-        }
+        vkCmdPipelineBarrier(command_buffer,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT as VkPipelineStageFlags, 
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT as VkPipelineStageFlags, 
+            0 as VkDependencyFlags, 
+            0, ptr::null(), 
+            0, ptr::null(), 
+            1, &image_memory_barrier);
     }
 }
 
-impl Drop for StorageImage {
+impl Drop for DepthStencilImage {
     fn drop(&mut self) {
-        log_debug!("Drop StorageImage");
+        log_debug!("Drop DepthStencilImage");
         unsafe {
             let device = &self.device;
             vkDestroyImageView(device.handle(), self.view, std::ptr::null());
+            // TODO(?): ImageMemory timing
             vkDestroyImage(device.handle(), self.image, std::ptr::null());
         }
     }

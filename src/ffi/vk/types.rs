@@ -1211,14 +1211,13 @@ pub struct VkBufferMemoryBarrier {
     pub size: VkDeviceSize,
 }
 
-// @see http://khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkPipelineBindPoint.html
+// @see http://khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPipelineBindPoint.html
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub enum VkPipelineBindPoint {
     VK_PIPELINE_BIND_POINT_GRAPHICS = 0,
     VK_PIPELINE_BIND_POINT_COMPUTE = 1,
-    VK_PIPELINE_BIND_POINT_RAY_TRACING_NV = 1000165000,
-    VK_PIPELINE_BIND_POINT_MAX_ENUM = 0x7FFFFFFF
+    VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR = 1000165000,
 }
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkExtensionProperties.html
