@@ -15,6 +15,12 @@ use std::sync::Arc;
 use std::io::Read;
 use std::ffi::CString;
 
+
+use VkStructureType::*;
+use VkImageUsageFlagBits::*;
+use VkSampleCountFlagBits::*;
+use VkPipelineStageFlagBits::*;
+
 pub struct ColorImage {
     device: Arc<Device>,
     image: VkImage,
@@ -25,6 +31,7 @@ pub struct ColorImage {
 }
 
 impl ColorImage {
+    // NOTE: has VK_IMAGE_USAGE_STORAGE_BIT
     pub unsafe fn new(device: &Arc<Device>, extent: VkExtent3D) -> Result<Arc<Self>> {
         let format = VkFormat::VK_FORMAT_R8G8B8A8_UNORM;
         // image
@@ -133,6 +140,35 @@ impl ColorImage {
     pub fn sampler(&self) -> VkSampler {
         self.sampler
     }
+
+    pub unsafe fn command_barrier_initial_layout(&self, command_buffer: VkCommandBuffer) {
+        let subresource_range = VkImageSubresourceRange {
+            aspectMask: VkImageAspectFlagBits::VK_IMAGE_ASPECT_COLOR_BIT as VkImageAspectFlags,
+            baseMipLevel: 0,
+            levelCount: 1,
+            baseArrayLayer: 0,
+            layerCount: 1,
+        };
+        let image_memory_barrier = VkImageMemoryBarrier {
+            sType: VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            pNext: ptr::null(),
+            srcAccessMask: 0 as VkAccessFlags,
+            dstAccessMask: 0 as VkAccessFlags,
+            oldLayout: VkImageLayout::VK_IMAGE_LAYOUT_UNDEFINED,
+            newLayout: VkImageLayout::VK_IMAGE_LAYOUT_GENERAL,
+            srcQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
+            dstQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
+            image: self.image,
+            subresourceRange: subresource_range,
+        };
+        vkCmdPipelineBarrier(command_buffer,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT as VkPipelineStageFlags, 
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT as VkPipelineStageFlags, 
+            0 as VkDependencyFlags, 
+            0, ptr::null(), 
+            0, ptr::null(), 
+            1, &image_memory_barrier);
+    }
 }
 
 impl Drop for ColorImage {
@@ -229,6 +265,36 @@ impl DepthStencilImage {
     #[inline]
     pub fn image_format(&self) -> VkFormat {
         self.image_format
+    }
+
+    pub unsafe fn command_barrier_initial_layout(&self, command_buffer: VkCommandBuffer) {
+        let subresource_range = VkImageSubresourceRange {
+            aspectMask: VkImageAspectFlagBits::VK_IMAGE_ASPECT_DEPTH_BIT as VkImageAspectFlags 
+                | VkImageAspectFlagBits::VK_IMAGE_ASPECT_STENCIL_BIT as VkImageAspectFlags,
+            baseMipLevel: 0,
+            levelCount: 1,
+            baseArrayLayer: 0,
+            layerCount: 1,
+        };
+        let image_memory_barrier = VkImageMemoryBarrier {
+            sType: VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+            pNext: ptr::null(),
+            srcAccessMask: 0 as VkAccessFlags,
+            dstAccessMask: 0 as VkAccessFlags,
+            oldLayout: VkImageLayout::VK_IMAGE_LAYOUT_UNDEFINED,
+            newLayout: VkImageLayout::VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR,
+            srcQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
+            dstQueueFamilyIndex: VK_QUEUE_FAMILY_IGNORED,
+            image: self.image,
+            subresourceRange: subresource_range,
+        };
+        vkCmdPipelineBarrier(command_buffer,
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT as VkPipelineStageFlags, 
+            VK_PIPELINE_STAGE_ALL_COMMANDS_BIT as VkPipelineStageFlags, 
+            0 as VkDependencyFlags, 
+            0, ptr::null(), 
+            0, ptr::null(), 
+            1, &image_memory_barrier);
     }
 }
 

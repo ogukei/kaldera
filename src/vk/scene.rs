@@ -5,9 +5,9 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage};
-use super::swapchain::{SwapchainFramebuffers, SceneRenderPass};
-use super::geometry::{Vec3, Vec4};
-use super::staging::VertexStagingBuffer;
+use super::swapchain::{SwapchainFramebuffers, SwapchainFramebuffer, SceneRenderPass};
+use super::image::ColorImage;
+use super::offscreen::{OffscreenFramebuffer, OffscreenGraphicsPipeline};
 
 use std::ptr;
 use std::mem;
@@ -23,23 +23,29 @@ pub struct SceneGraphicsPipelineLayout {
     descriptor_pool: VkDescriptorPool,
     descriptor_set_layout: VkDescriptorSetLayout,
     descriptor_set: VkDescriptorSet,
+    color_image: Arc<ColorImage>,
 }
 
 impl SceneGraphicsPipelineLayout {
     pub fn new(
         device: &Arc<Device>, 
-        image_info: VkDescriptorImageInfo
+        color_image: &Arc<ColorImage>,
     ) -> Result<Arc<Self>> {
         unsafe {
-            Self::init(device, image_info)
+            Self::init(device, color_image)
         }
     }
 
-    unsafe fn init(device: &Arc<Device>, image_info: VkDescriptorImageInfo) -> Result<Arc<Self>> {
+    unsafe fn init(device: &Arc<Device>, color_image: &Arc<ColorImage>) -> Result<Arc<Self>> {
+        let image_info = VkDescriptorImageInfo {
+            imageLayout: VkImageLayout::VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            imageView: color_image.view(),
+            sampler: color_image.sampler(),
+        };
         // Descriptor Pool
         let mut descriptor_pool = MaybeUninit::<VkDescriptorPool>::zeroed();
         {
-            let size = VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1);
+            let size = VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1);
             let create_info = VkDescriptorPoolCreateInfo::new(1, 1, &size);
             vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), descriptor_pool.as_mut_ptr())
                 .into_result()
@@ -98,6 +104,7 @@ impl SceneGraphicsPipelineLayout {
             descriptor_pool,
             descriptor_set_layout,
             descriptor_set,
+            color_image: Arc::clone(color_image),
         };
         Ok(Arc::new(layout))
     }
@@ -336,5 +343,71 @@ impl Drop for SceneGraphicsPipeline {
             vkDestroyPipelineCache(device.handle(), self.cache, ptr::null());
             vkDestroyPipeline(device.handle(), self.handle, ptr::null());
         }
+    }
+}
+
+pub struct SceneGraphicsRender {
+    pipeline: Arc<SceneGraphicsPipeline>,
+}
+
+impl SceneGraphicsRender {
+    pub fn new(
+        pipeline: &Arc<SceneGraphicsPipeline>,
+    ) -> Result<Arc<Self>> {
+        unsafe {
+            Self::init(pipeline)
+        }
+    }
+
+    unsafe fn init(
+        pipeline: &Arc<SceneGraphicsPipeline>,
+    ) -> Result<Arc<Self>> {
+        let render = Self {
+            pipeline: Arc::clone(pipeline),
+        };
+        Ok(Arc::new(render))
+    }
+
+    pub unsafe fn command(&self, 
+        command_buffer: VkCommandBuffer, 
+        swapchain_framebuffer: &SwapchainFramebuffer,
+        area: VkRect2D,
+    ) {
+        let pipeline = &self.pipeline;
+        let descriptor_set = pipeline.layout().descriptor_set();
+        let clear_values = vec![
+            VkClearValue {
+                values: [0.0, 0.0, 0.2, 1.0],
+            },
+            VkClearValue {
+                values: [1.0, 0.0, 0.0, 0.0],
+            },
+        ];
+        let render_pass_begin_info = VkRenderPassBeginInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            pNext: ptr::null(),
+            renderPass: pipeline.render_pass().handle(),
+            framebuffer: swapchain_framebuffer.handle(),
+            renderArea: area,
+            clearValueCount: clear_values.len() as u32,
+            pClearValues: clear_values.as_ptr(),
+        };
+        vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
+        let viewport = VkViewport {
+            x: 0.0,
+            y: 0.0,
+            width: area.extent.width as c_float,
+            height: area.extent.height as c_float,
+            minDepth: 0.0,
+            maxDepth: 1.0,
+        };
+        vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+        let scissor = area;
+        vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+        vkCmdBindDescriptorSets(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS, 
+            pipeline.layout().handle(), 0, 1, &descriptor_set, 0, ptr::null());
+        vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle());
+        vkCmdDraw(command_buffer, 3, 1, 0, 0);
+        vkCmdEndRenderPass(command_buffer);
     }
 }

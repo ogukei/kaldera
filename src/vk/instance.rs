@@ -24,6 +24,7 @@ impl Instance {
         let extension_names: Vec<CString> = vec![
             CString::new("VK_KHR_surface").unwrap(),
             CString::new("VK_KHR_xcb_surface").unwrap(),
+            CString::new("VK_KHR_get_physical_device_properties2").unwrap(),
         ];
         let extension_name_ptrs = extension_names.iter()
             .map(|v| v.as_ptr())
@@ -156,6 +157,25 @@ impl PhysicalDevice {
             extensions.resize(size, std::mem::zeroed());
             vkEnumerateDeviceExtensionProperties(self.handle, ptr::null(), count.as_mut_ptr(), extensions.as_mut_ptr());
             Ok(extensions)
+        }
+    }
+
+    pub fn memory_type_index(&self, 
+        memory_requirements: &VkMemoryRequirements, 
+        memory_property_flags: VkMemoryPropertyFlags,
+    ) -> Option<u32> {
+        unsafe {
+            let mut memory_properties = MaybeUninit::<VkPhysicalDeviceMemoryProperties>::zeroed();
+            vkGetPhysicalDeviceMemoryProperties(self.handle(), memory_properties.as_mut_ptr());
+            let memory_properties = memory_properties.assume_init();
+            // find a memory type index that fits the properties
+            let memory_type_bits = memory_requirements.memoryTypeBits;
+            let memory_type_index = memory_properties.memoryTypes.iter()
+                .enumerate()
+                .find(|(i, v)| ((memory_type_bits >> i) & 1) == 1 
+                    && (v.propertyFlags & memory_property_flags) == memory_property_flags)
+                .map(|(i, _)| i as u32);
+            memory_type_index
         }
     }
 }

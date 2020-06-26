@@ -9,6 +9,7 @@ use super::staging::VertexStagingBuffer;
 use super::geometry::{Vec3, Vec4};
 use super::image::{ColorImage, DepthStencilImage};
 use super::model::Vertex;
+use super::swapchain::{SwapchainFramebuffer};
 
 use std::ptr;
 use std::mem;
@@ -142,13 +143,20 @@ pub struct OffscreenFramebuffer {
 }
 
 impl OffscreenFramebuffer {
-    pub fn new(device: &Arc<Device>, extent: VkExtent3D, width: u32, height: u32) -> Result<Arc<Self>> {
+    pub fn new(device: &Arc<Device>, extent: VkExtent2D) -> Result<Arc<Self>> {
         unsafe {
-            Self::init(device, extent, width, height)
+            Self::init(device, extent)
         }
     }
 
-    unsafe fn init(device: &Arc<Device>, extent: VkExtent3D, width: u32, height: u32) -> Result<Arc<Self>> {
+    unsafe fn init(device: &Arc<Device>, extent: VkExtent2D) -> Result<Arc<Self>> {
+        let width = extent.width;
+        let height = extent.height;
+        let extent = VkExtent3D {
+            width,
+            height,
+            depth: 1,
+        };
         let color_image = ColorImage::new(device, extent)?;
         let depth_image = DepthStencilImage::new(device, extent)?;
         let render_pass = OffscreenRenderPass::new(device, color_image.image_format(), depth_image.image_format())?;
@@ -196,6 +204,24 @@ impl OffscreenFramebuffer {
     pub fn color_image(&self) -> &Arc<ColorImage> {
         &self.color_image
     }
+
+    #[inline]
+    pub fn depth_image(&self) -> &Arc<DepthStencilImage> {
+        &self.depth_image
+    }
+
+    pub fn barrier_initial_layout(&self, command_pool: &Arc<CommandPool>) {
+        unsafe {
+            let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
+                self.color_image().command_barrier_initial_layout(command_buffer);
+                self.depth_image().command_barrier_initial_layout(command_buffer);
+            });
+            let command_buffers = vec![command_buffer.handle()];
+            command_pool.queue()
+                .submit_then_wait(&command_buffers)
+                .unwrap();
+        }
+    }
 }
 
 impl Drop for OffscreenFramebuffer {
@@ -205,70 +231,6 @@ impl Drop for OffscreenFramebuffer {
             let device = &self.device;
             vkDestroyFramebuffer(device.handle(), self.handle, std::ptr::null());
         }
-    }
-}
-
-pub struct OffscreenFrameRender {
-    command_buffer: Arc<CommandBuffer>,
-}
-
-impl OffscreenFrameRender {
-    pub unsafe fn new(
-        framebuffer: &Arc<OffscreenFramebuffer>,
-        command_pool: &Arc<CommandPool>, 
-        pipeline: &Arc<OffscreenGraphicsPipeline>,
-        staging_buffer: &Arc<VertexStagingBuffer>,
-        area: VkRect2D
-    ) -> Result<Self> {
-        let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
-            let render_pass = framebuffer.render_pass();
-            let clear_values = vec![
-                VkClearValue {
-                    values: [0.0, 0.0, 0.2, 1.0],
-                },
-                VkClearValue {
-                    values: [1.0, 0.0, 0.0, 0.0],
-                },
-            ];
-            let render_pass_begin_info = VkRenderPassBeginInfo {
-                sType: VkStructureType::VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-                pNext: ptr::null(),
-                renderPass: render_pass.handle(),
-                framebuffer: framebuffer.handle(),
-                renderArea: area,
-                clearValueCount: clear_values.len() as u32,
-                pClearValues: clear_values.as_ptr(),
-            };
-            vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
-            let viewport = VkViewport {
-                x: 0.0,
-                y: 0.0,
-                width: area.extent.width as c_float,
-                height: area.extent.height as c_float,
-                minDepth: 0.0,
-                maxDepth: 1.0,
-            };
-            vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-            let scissor = area;
-            vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-            vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle());
-            let offset: VkDeviceSize = 0;
-            let vertex_buffer: VkBuffer = staging_buffer.vertex_buffer().device_buffer_memory().buffer();
-            vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer, &offset);
-            let index_buffer: VkBuffer = staging_buffer.index_buffer().device_buffer_memory().buffer();
-            vkCmdBindIndexBuffer(command_buffer, index_buffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
-            vkCmdDrawIndexed(command_buffer, staging_buffer.index_count() as u32, 1, 0, 0, 0);
-            vkCmdEndRenderPass(command_buffer);
-        });
-        let render = OffscreenFrameRender {
-            command_buffer,
-        };
-        Ok(render)
-    }
-
-    #[inline]
-    fn command_buffer(&self) -> &Arc<CommandBuffer> {
-        &self.command_buffer
     }
 }
 

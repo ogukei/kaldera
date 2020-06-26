@@ -30,6 +30,8 @@ impl Swapchain {
         let physical_device = device.physical_device();
         assert_eq!(surface.instance().handle(), device_queues.instance().handle());
         assert!(surface.is_supported(device_queues.present_queue().family(), physical_device).unwrap_or(false));
+        // default configuration
+        let image_usage_flags = VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT as VkImageUsageFlags;
         unsafe {
             let surface_capabilities = surface.capabilities(physical_device)?;
             let surface_formats = surface.formats(physical_device)?;
@@ -65,7 +67,7 @@ impl Swapchain {
                 imageColorSpace: surface_format.colorSpace,
                 imageExtent: extent,
                 imageArrayLayers: 1,
-                imageUsage: VkImageUsageFlagBits::VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT as VkImageUsageFlags,
+                imageUsage: image_usage_flags,
                 imageSharingMode: sharing_mode,
                 queueFamilyIndexCount: family_indices.len() as u32,
                 pQueueFamilyIndices: indices_ptr,
