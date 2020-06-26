@@ -9,6 +9,6 @@ pub struct Vertex {
 
 #[repr(C)]
 pub struct RayTracingUniformBuffer {
-    pub proj_inverse: Mat4,
     pub view_inverse: Mat4,
+    pub proj_inverse: Mat4,
 }

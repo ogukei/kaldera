@@ -6,4 +6,11 @@ edition = "2018"
 
 [dependencies]
 libc = "*"
-futures = { version = "*", features = ["thread-pool"] }
+futures = { optional = true, version = "*", features = ["thread-pool"] }
+nalgebra-glm = { optional = true, version = "*" }
+
+[features]
+default = ["use-nalgebra"]
+
+use-nalgebra = ["nalgebra-glm"]
+use-base = ["futures"]

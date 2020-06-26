@@ -22,6 +22,9 @@ mod memory;
 mod geometry;
 mod model;
 
+#[cfg(feature = "use-nalgebra")]
+mod geometry_ext;
+
 mod staging;
 mod image;
 mod swapchain;
@@ -38,6 +41,9 @@ pub use device_queues::*;
 pub use memory::*;
 pub use geometry::*;
 pub use model::*;
+
+#[cfg(feature = "use-nalgebra")]
+pub use geometry_ext::*;
 
 pub use staging::*;
 pub use image::*;

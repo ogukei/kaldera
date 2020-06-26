@@ -4,18 +4,14 @@ extern crate kaldera;
 use kaldera::ffi::vk::*;
 use kaldera::ffi::xcb::*;
 use kaldera::vk::*;
-use kaldera::base::Environment;
-use kaldera::base::*;
-use futures::executor::block_on;
 use std::sync::Arc;
 
 fn raytracing_render(device_queues: &Arc<DeviceQueues>, surface: &Arc<Surface>) -> Arc<GraphicsRender> {
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
-    let z: f32 = 1.0;
     let vertices = vec![
-        Vec3 { x: 1.0, y: 1.0, z: z },
-        Vec3 { x: -1.0, y: 1.0, z: z },
-        Vec3 { x: 0.0, y: -1.0, z: z },
+        Vec3 { x: 1.0, y: 1.0, z: 0.0 },
+        Vec3 { x: -1.0, y: 1.0, z: 0.0 },
+        Vec3 { x: 0.0, y: -1.0, z: 0.0 },
     ];
     let indices = vec![
         0, 1, 2,
@@ -36,9 +32,10 @@ fn raytracing_render(device_queues: &Arc<DeviceQueues>, surface: &Arc<Surface>) 
         .unwrap();
     let raytracing_pipeline = RayTracingGraphicsPipeline::new(device_queues.device())
         .unwrap();
+    let camera = Camera::new();
     let model = RayTracingUniformBuffer {
-        proj_inverse: Default::default(),
-        view_inverse: Default::default(),
+        view_inverse: camera.inv_view(),
+        proj_inverse: camera.inv_proj(),
     };
     let uniform_buffer = UniformBuffer::new(&command_pool, model)
         .unwrap();
