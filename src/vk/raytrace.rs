@@ -700,9 +700,9 @@ impl RayTracingGraphicsPipeline {
         }
         let pipeline_layout = pipeline_layout.assume_init();
         // Shader Stages
-        let raygen_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/triangle.raygen.rgen.spv")).unwrap();
-        let rmiss_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/triangle.miss.rmiss.spv")).unwrap();
-        let rchit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/triangle.closesthit.rchit.spv")).unwrap();
+        let raygen_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.raygen.rgen.spv")).unwrap();
+        let rmiss_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.miss.rmiss.spv")).unwrap();
+        let rchit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.closesthit.rchit.spv")).unwrap();
         let shader_entry_point = CString::new("main").unwrap();
         const INDEX_RAYGEN: u32 = 0;
         const INDEX_MISS: u32 = 1;

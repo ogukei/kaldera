@@ -14,10 +14,10 @@ struct Context {
 }
 
 fn raytracing_render(device_queues: &Arc<DeviceQueues>, surface: &Arc<Surface>) -> Context {
-    let box_model = BoxModel::new().unwrap();
-    let vertices = box_model.vertices();
-    let indices = box_model.indices();
-    let vertex_normals = box_model.vertex_normals();
+    let model = BoxModel::new().unwrap();
+    let vertices = model.vertices();
+    let indices = model.indices();
+    let vertex_normals = model.vertex_normals();
     let num_vertices = vertices.len() as u32;
     let num_indices = indices.len() as u32;
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
@@ -38,11 +38,11 @@ fn raytracing_render(device_queues: &Arc<DeviceQueues>, surface: &Arc<Surface>) 
     let raytracing_pipeline = RayTracingGraphicsPipeline::new(device_queues.device())
         .unwrap();
     let camera = OrbitalCamera::new();
-    let model = RayTracingUniformBufferModel {
+    let uniform_buffer_model = RayTracingUniformBufferModel {
         view_inverse: camera.view_inverse(),
         proj_inverse: camera.projection_inverse(),
     };
-    let uniform_buffer = UniformBuffer::new(&command_pool, model)
+    let uniform_buffer = UniformBuffer::new(&command_pool, &vec![uniform_buffer_model])
         .unwrap();
     let extent = VkExtent2D {
         width: 800,
@@ -100,7 +100,7 @@ fn main() {
                 view_inverse: camera.view_inverse(),
                 proj_inverse: camera.projection_inverse(),
             };
-            context.uniform_buffer.update(&model);
+            context.uniform_buffer.update(&vec![model]);
         }
         context.graphics_render.draw().unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));

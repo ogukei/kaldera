@@ -465,21 +465,21 @@ pub struct UniformBuffer {
 }
 
 impl UniformBuffer {
-    pub fn new<Model>(command_pool: &Arc<CommandPool>, model: Model) -> Result<Arc<Self>> {
+    pub fn new<Model>(command_pool: &Arc<CommandPool>, model: &Vec<Model>) -> Result<Arc<Self>> {
         unsafe {
             Self::init(command_pool, model)
         }
     }
 
-    unsafe fn init<Model>(command_pool: &Arc<CommandPool>, model: Model) -> Result<Arc<Self>> {
-        let model_size = std::mem::size_of::<Model>();
+    unsafe fn init<Model>(command_pool: &Arc<CommandPool>, model: &Vec<Model>) -> Result<Arc<Self>> {
+        let size = std::mem::size_of::<Model>() * model.len();
         let staging_buffer = DedicatedStagingBuffer::new(command_pool, 
             VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT as VkBufferUsageFlags,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-            model_size as VkDeviceSize,
+            size as VkDeviceSize,
         )
             .unwrap();
-        staging_buffer.write(&model as *const _ as *const c_void, model_size);
+        staging_buffer.write(model.as_ptr() as *const _ as *const c_void, size);
         let uniform_buffer = UniformBuffer {
             staging_buffer,
         };
@@ -491,10 +491,10 @@ impl UniformBuffer {
         self.staging_buffer.device_buffer_memory()
     }
 
-    pub fn update<Model>(&self, model: &Model) {
-        let model_size = std::mem::size_of::<Model>();
-        assert_eq!(model_size as VkDeviceSize, self.staging_buffer.host_buffer_memory().size());
-        self.staging_buffer.write(model as *const _ as *const c_void, model_size);
+    pub fn update<Model>(&self, model: &Vec<Model>) {
+        let size = std::mem::size_of::<Model>() * model.len();
+        assert_eq!(size as VkDeviceSize, self.staging_buffer.host_buffer_memory().size());
+        self.staging_buffer.write(model.as_ptr() as *const _ as *const c_void, size);
     }
 }
 
