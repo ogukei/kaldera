@@ -9,6 +9,12 @@ pub struct Vec4 {
     pub w: f32,
 }
 
+impl Vec4 {
+    pub fn new(x: f32, y: f32, z: f32, w: f32) -> Self {
+        Self { x, y, z, w }
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Vec3 {

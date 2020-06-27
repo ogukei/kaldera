@@ -1,8 +1,8 @@
 
 extern crate libc;
-#[cfg(feature = "use-nalgebra")]
+#[cfg(feature = "with-nalgebra")]
 extern crate nalgebra_glm;
-#[cfg(feature = "use-gltf")]
+#[cfg(feature = "with-gltf")]
 extern crate gltf;
 
 pub mod ffi;

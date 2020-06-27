@@ -10,7 +10,7 @@ nalgebra-glm = { optional = true, version = "*" }
 gltf = { optional = true, version = "*" }
 
 [features]
-default = ["use-nalgebra", "use-gltf"]
+default = ["with-nalgebra", "with-gltf"]
 
-use-nalgebra = ["nalgebra-glm"]
-use-gltf = ["gltf"]
+with-nalgebra = ["nalgebra-glm"]
+with-gltf = ["gltf"]

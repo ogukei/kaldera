@@ -459,3 +459,85 @@ impl DedicatedStagingBuffer {
         &self.device_buffer_memory
     }
 }
+
+pub struct UniformBuffer {
+    staging_buffer: Arc<DedicatedStagingBuffer>,
+}
+
+impl UniformBuffer {
+    pub fn new<Model>(command_pool: &Arc<CommandPool>, model: &Vec<Model>) -> Result<Arc<Self>> {
+        unsafe {
+            Self::init(command_pool, model)
+        }
+    }
+
+    unsafe fn init<Model>(command_pool: &Arc<CommandPool>, model: &Vec<Model>) -> Result<Arc<Self>> {
+        let size = std::mem::size_of::<Model>() * model.len();
+        let staging_buffer = DedicatedStagingBuffer::new(command_pool, 
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            size as VkDeviceSize,
+        )
+            .unwrap();
+        staging_buffer.write(model.as_ptr() as *const _ as *const c_void, size);
+        let uniform_buffer = UniformBuffer {
+            staging_buffer,
+        };
+        Ok(Arc::new(uniform_buffer))
+    }
+
+    #[inline]
+    pub fn device_buffer_memory(&self) -> &Arc<DedicatedBufferMemory> {
+        self.staging_buffer.device_buffer_memory()
+    }
+
+    pub fn update<Model>(&self, model: &Vec<Model>) {
+        let size = std::mem::size_of::<Model>() * model.len();
+        assert_eq!(size as VkDeviceSize, self.staging_buffer.host_buffer_memory().size());
+        self.staging_buffer.write(model.as_ptr() as *const _ as *const c_void, size);
+    }
+}
+
+pub struct StorageBuffer {
+    staging_buffer: Arc<DedicatedStagingBuffer>,
+}
+
+impl StorageBuffer {
+    pub fn new<Model>(
+        command_pool: &Arc<CommandPool>, 
+        model: &Vec<Model>,
+    ) -> Result<Arc<Self>> {
+        unsafe {
+            Self::init(command_pool, model)
+        }
+    }
+
+    unsafe fn init<Model>(
+        command_pool: &Arc<CommandPool>, 
+        model: &Vec<Model>,
+    ) -> Result<Arc<Self>> {
+        let size = std::mem::size_of::<Model>() * model.len();
+        let staging_buffer = DedicatedStagingBuffer::new(command_pool, 
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            size as VkDeviceSize,
+        )
+            .unwrap();
+        staging_buffer.write(model.as_ptr() as *const _ as *const c_void, size);
+        let storage_buffer = StorageBuffer {
+            staging_buffer,
+        };
+        Ok(Arc::new(storage_buffer))
+    }
+
+    #[inline]
+    pub fn device_buffer_memory(&self) -> &Arc<DedicatedBufferMemory> {
+        self.staging_buffer.device_buffer_memory()
+    }
+
+    pub fn update<Model>(&self, model: &Vec<Model>) {
+        let size = std::mem::size_of::<Model>() * model.len();
+        assert_eq!(size as VkDeviceSize, self.staging_buffer.host_buffer_memory().size());
+        self.staging_buffer.write(model.as_ptr() as *const _ as *const c_void, size);
+    }
+}
