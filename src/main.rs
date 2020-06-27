@@ -4,24 +4,28 @@ extern crate kaldera;
 use kaldera::ffi::vk::*;
 use kaldera::ffi::xcb::*;
 use kaldera::vk::*;
-use std::sync::Arc;
+use kaldera::base::*;
+use std::sync::{Arc, Mutex};
 
-fn raytracing_render(device_queues: &Arc<DeviceQueues>, surface: &Arc<Surface>) -> Arc<GraphicsRender> {
+struct Context {
+    camera: Arc<Mutex<OrbitalCamera>>,
+    graphics_render: Arc<GraphicsRender>,
+    uniform_buffer: Arc<UniformBuffer>,
+}
+
+fn raytracing_render(device_queues: &Arc<DeviceQueues>, surface: &Arc<Surface>) -> Context {
+    let box_model = BoxModel::new().unwrap();
+    let vertices = box_model.vertices();
+    let indices = box_model.indices();
+    let num_vertices = vertices.len() as u32;
+    let num_indices = indices.len() as u32;
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
-    let vertices = vec![
-        Vec3 { x: 1.0, y: 1.0, z: 0.0 },
-        Vec3 { x: -1.0, y: 1.0, z: 0.0 },
-        Vec3 { x: 0.0, y: -1.0, z: 0.0 },
-    ];
-    let indices = vec![
-        0, 1, 2,
-    ];
-    let staging_buffer = AccelerationVertexStagingBuffer::new(&command_pool, vertices, indices);
+    let staging_buffer = AccelerationVertexStagingBuffer::new(&command_pool, &vertices, &indices);
     let geometry = BottomLevelAccelerationStructureGeometry::new(
-        3, 
+        num_vertices, 
         std::mem::size_of::<Vec3>() as VkDeviceSize, 
         staging_buffer.vertex_buffer().device_buffer_memory(),
-        3,
+        num_indices,
         staging_buffer.index_buffer().device_buffer_memory(),
     )
         .unwrap();
@@ -32,16 +36,16 @@ fn raytracing_render(device_queues: &Arc<DeviceQueues>, surface: &Arc<Surface>) 
         .unwrap();
     let raytracing_pipeline = RayTracingGraphicsPipeline::new(device_queues.device())
         .unwrap();
-    let camera = Camera::new();
-    let model = RayTracingUniformBuffer {
-        view_inverse: camera.inv_view(),
-        proj_inverse: camera.inv_proj(),
+    let camera = OrbitalCamera::new();
+    let model = RayTracingUniformBufferModel {
+        view_inverse: camera.view_inverse(),
+        proj_inverse: camera.projection_inverse(),
     };
     let uniform_buffer = UniformBuffer::new(&command_pool, model)
         .unwrap();
     let extent = VkExtent2D {
-        width: 400,
-        height: 400,
+        width: 800,
+        height: 800,
     };
     let framebuffer = OffscreenFramebuffer::new(device_queues.device(), extent)
         .unwrap();
@@ -60,54 +64,36 @@ fn raytracing_render(device_queues: &Arc<DeviceQueues>, surface: &Arc<Surface>) 
     let graphics_frame_renderer = GraphicsFrameRenderer::new(&raytracing_render, &scene_render).unwrap();
     let graphics_render = GraphicsRender::new(&command_pool, &swapchain_framebuffers, &graphics_frame_renderer, extent)
         .unwrap();
-    graphics_render
+    Context {
+        camera: Arc::new(Mutex::new(camera)),
+        graphics_render,
+        uniform_buffer,
+    }
 }
 
 fn main() {
     let instance = Instance::new().unwrap();
     // surface
     let connection = XcbConnection::new();
-    let window = XcbWindow::new(&connection);
+    let window = XcbWindow::new(&connection, 800, 800);
     let surface = XcbSurface::new(&instance, &window).unwrap();
     // device
     let device_queues = DeviceQueuesBuilder::new(&surface)
         .build()
         .unwrap();
-    println!("{:?}", device_queues.device().physical_device().properties_ray_tracing());
-    let render = raytracing_render(&device_queues, &surface);
-    for i in 0..100 {
-        println!("frame {}", i);
-        render.draw().unwrap();
-        let events = window.events();
-        if let Some(events) = events {
-            let event_types: Vec<&XcbEventType> = events.iter()
-                .filter_map(|v| v.event_type())
-                .collect();
-            for event_type in event_types {
-                match event_type {
-                    XcbEventType::KeyPress(event) => {
-                        println!("KeyPress {}", event.detail);
-                    },
-                    XcbEventType::KeyRelease(event) => {
-                        println!("KeyRelease {}", event.detail);
-                    },
-                    XcbEventType::ButtonPress(event) => {
-                        println!("ButtonPress {} {}", event.event_x, event.event_y);
-                    },
-                    XcbEventType::ButtonRelease(event) => {
-                        println!("ButtonRelease {} {}", event.event_x, event.event_y);
-                    },
-                    XcbEventType::MotionNotify(event) => {
-                        println!("MotionNotify {} {}", event.event_x, event.event_y);
-                    },
-                    XcbEventType::ConfigureNotify(event) => {
-                        println!("ConfigureNotify {} {}", event.width, event.height);
-                    }
-                }
-            }
+    let context = raytracing_render(&device_queues, &surface);
+    let interpreter = XcbInputInterpreter::new(&window);
+    let mut camera = context.camera.lock().unwrap();
+    loop {
+        if let Some(event) = interpreter.next() {
+            camera.apply(event);
+            let model = RayTracingUniformBufferModel {
+                view_inverse: camera.view_inverse(),
+                proj_inverse: camera.projection_inverse(),
+            };
+            context.uniform_buffer.update(&model);
         }
-
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        context.graphics_render.draw().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
-
 }

@@ -1,7 +1,7 @@
 
 use nalgebra_glm as glm;
 
-use super::geometry::*;
+use crate::vk::{Mat4, Vec4};
 
 impl From<glm::Mat4x4> for Mat4 {
     fn from(v: glm::Mat4x4) -> Self {
@@ -33,31 +33,5 @@ impl From<glm::Mat4x4> for Mat4 {
                 },
             ],
         }
-    }
-}
-
-pub struct Camera {
-    inv_view: Mat4,
-    inv_proj: Mat4,
-}
-
-impl Camera {
-    pub fn new() -> Self {
-        let look_at = glm::look_at(&glm::vec3(0.0, 0.0, 10.0), &glm::vec3(0.0, 0.0, 0.0), &glm::vec3(0.0, 1.0, 0.0));
-        let perspective = glm::perspective_fov(glm::radians(&glm::vec1(60.0)).x, 1.0, 1.0, 0.1, 100.0);
-        let inv_view = glm::inverse(&look_at);
-        let inv_proj = glm::inverse(&perspective);
-        Self {
-            inv_view: inv_view.into(),
-            inv_proj: inv_proj.into(),
-        }
-    }
-
-    pub fn inv_view(&self) -> Mat4 {
-        self.inv_view
-    }
-
-    pub fn inv_proj(&self) -> Mat4 {
-        self.inv_proj
     }
 }

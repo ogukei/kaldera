@@ -5,8 +5,8 @@ ifndef GLSLC
 GLSLC=glslc
 endif
 
-SOURCE_DIR=data
-BUILD_DIR=data
+SOURCE_DIR=data/shaders
+BUILD_DIR=data/shaders
 
 SOURCES_VERT=$(shell find $(SOURCE_DIR) -name '*.vert')
 SOURCES_FRAG=$(shell find $(SOURCE_DIR) -name '*.frag')

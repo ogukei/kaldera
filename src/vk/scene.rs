@@ -249,8 +249,8 @@ impl SceneGraphicsPipeline {
             pVertexAttributeDescriptions: ptr::null(),
         };
         // shaders
-        let vertex_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/fullscreen.vert.spv")).unwrap();
-        let fragment_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/fullscreen.frag.spv")).unwrap();
+        let vertex_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/fullscreen.vert.spv")).unwrap();
+        let fragment_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/fullscreen.frag.spv")).unwrap();
         let shader_entry_point = CString::new("main").unwrap();
         let shader_stages = vec![
             VkPipelineShaderStageCreateInfo {
@@ -395,9 +395,9 @@ impl SceneGraphicsRender {
         vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
         let viewport = VkViewport {
             x: 0.0,
-            y: 0.0,
+            y: area.extent.height as c_float,
             width: area.extent.width as c_float,
-            height: area.extent.height as c_float,
+            height: -(area.extent.height as c_float),
             minDepth: 0.0,
             maxDepth: 1.0,
         };

@@ -59,12 +59,12 @@ pub struct XcbWindow {
 }
 
 impl XcbWindow {
-    pub fn new(connection: &Arc<XcbConnection>) -> Arc<XcbWindow> {
-        let window = unsafe { Self::init(connection) };
+    pub fn new(connection: &Arc<XcbConnection>, width: u16, height: u16) -> Arc<XcbWindow> {
+        let window = unsafe { Self::init(connection, width, height) };
         Arc::new(window)
     }
 
-    unsafe fn init(connection: &Arc<XcbConnection>) -> Self {
+    unsafe fn init(connection: &Arc<XcbConnection>, width: u16, height: u16) -> Self {
         let conn = connection.handle();
         let screen = connection.screen();
         let window = xcb_generate_id(connection.handle());
@@ -73,8 +73,6 @@ impl XcbWindow {
         value_list[0] = screen.black_pixel;
         let x: i16 = 0;
         let y: i16 = 0;
-        let width: u16 = 400;
-        let height: u16 = 400;
         value_list[1] = xcb_event_mask_t::default();
         xcb_create_window(conn,
             XCB_COPY_FROM_PARENT as u8,
