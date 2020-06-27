@@ -17,6 +17,7 @@ fn raytracing_render(device_queues: &Arc<DeviceQueues>, surface: &Arc<Surface>) 
     let box_model = BoxModel::new().unwrap();
     let vertices = box_model.vertices();
     let indices = box_model.indices();
+    let vertex_normals = box_model.vertex_normals();
     let num_vertices = vertices.len() as u32;
     let num_indices = indices.len() as u32;
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
@@ -49,7 +50,15 @@ fn raytracing_render(device_queues: &Arc<DeviceQueues>, surface: &Arc<Surface>) 
     };
     let framebuffer = OffscreenFramebuffer::new(device_queues.device(), extent)
         .unwrap();
-    let descriptor_sets = RayTracingDescriptorSets::new(&raytracing_pipeline, &top_level_structure, framebuffer.color_image(), &uniform_buffer)
+    let vertex_storage_buffer = StorageBuffer::new(&command_pool, &vertex_normals).unwrap();
+    let index_storage_buffer = StorageBuffer::new(&command_pool, &indices).unwrap();
+    let descriptor_sets = RayTracingDescriptorSets::new(
+        &raytracing_pipeline, 
+        &top_level_structure, 
+        framebuffer.color_image(), 
+        &uniform_buffer, 
+        &vertex_storage_buffer,
+        &index_storage_buffer)
         .unwrap();
     let raytracing_render = RayTracingGraphicsRender::new(&command_pool, &raytracing_pipeline, &descriptor_sets)
         .unwrap();

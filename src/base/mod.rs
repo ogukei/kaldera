@@ -2,17 +2,17 @@
 mod input;
 pub use input::*;
 
-#[cfg(feature = "use-nalgebra")]
+#[cfg(feature = "with-nalgebra")]
 mod geometry;
-#[cfg(feature = "use-nalgebra")]
+#[cfg(feature = "with-nalgebra")]
 pub use geometry::*;
 
-#[cfg(feature = "use-nalgebra")]
+#[cfg(feature = "with-nalgebra")]
 mod camera;
-#[cfg(feature = "use-nalgebra")]
+#[cfg(feature = "with-nalgebra")]
 pub use camera::*;
 
-#[cfg(feature = "use-gltf")]
+#[cfg(feature = "with-gltf")]
 mod model;
-#[cfg(feature = "use-gltf")]
+#[cfg(feature = "with-gltf")]
 pub use model::*;

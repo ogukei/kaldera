@@ -4,7 +4,7 @@ use super::error::Result;
 use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
-use super::memory::{StagingBuffer, StagingBufferUsage, DedicatedBufferMemory, DedicatedStagingBuffer};
+use super::memory::{StorageBuffer, UniformBuffer, DedicatedBufferMemory, DedicatedStagingBuffer};
 use super::image::{ColorImage};
 
 use std::ptr;
@@ -673,6 +673,16 @@ impl RayTracingGraphicsPipeline {
                     VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32,
                     2,
                 ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    3,
+                ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    4,
+                ),
             ];
             let create_info = VkDescriptorSetLayoutCreateInfo::new(bindings.len() as u32, bindings.as_ptr());
             vkCreateDescriptorSetLayout(device.handle(), &create_info, ptr::null(), descriptor_set_layout.as_mut_ptr())
@@ -831,7 +841,9 @@ pub struct RayTracingDescriptorSets {
     pipeline: Arc<RayTracingGraphicsPipeline>,
     acceleration_structure: Arc<TopLevelAccelerationStructure>,
     storage_image: Arc<ColorImage>,
-    uniform_buffer: Arc<UniformBuffer>,
+    scene_uniform_buffer: Arc<UniformBuffer>,
+    vertex_storage_buffer: Arc<StorageBuffer>,
+    index_storage_buffer: Arc<StorageBuffer>,
     descriptor_pool: VkDescriptorPool,
     descriptor_set: VkDescriptorSet,
 }
@@ -841,10 +853,12 @@ impl RayTracingDescriptorSets {
         pipeline: &Arc<RayTracingGraphicsPipeline>, 
         acceleration_structure: &Arc<TopLevelAccelerationStructure>,
         storage_image: &Arc<ColorImage>,
-        uniform_buffer: &Arc<UniformBuffer>,
+        scene_uniform_buffer: &Arc<UniformBuffer>,
+        vertex_storage_buffer: &Arc<StorageBuffer>,
+        index_storage_buffer: &Arc<StorageBuffer>,
     ) -> Result<Arc<Self>> {
         unsafe {
-            Self::init(pipeline, acceleration_structure, storage_image, uniform_buffer)
+            Self::init(pipeline, acceleration_structure, storage_image, scene_uniform_buffer, vertex_storage_buffer, index_storage_buffer)
         }
     }
 
@@ -852,7 +866,9 @@ impl RayTracingDescriptorSets {
         pipeline: &Arc<RayTracingGraphicsPipeline>, 
         acceleration_structure: &Arc<TopLevelAccelerationStructure>,
         storage_image: &Arc<ColorImage>,
-        uniform_buffer: &Arc<UniformBuffer>,
+        scene_uniform_buffer: &Arc<UniformBuffer>,
+        vertex_storage_buffer: &Arc<StorageBuffer>,
+        index_storage_buffer: &Arc<StorageBuffer>,
     ) -> Result<Arc<Self>> {
         let device = pipeline.device();
         // Descriptor Pool
@@ -862,6 +878,8 @@ impl RayTracingDescriptorSets {
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
             ];
             let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr());
             vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), descriptor_pool.as_mut_ptr())
@@ -908,18 +926,38 @@ impl RayTracingDescriptorSets {
             1,
             &write_image_info);
         let write_uniform_buffer_info = VkDescriptorBufferInfo {
-            buffer: uniform_buffer.device_buffer_memory().buffer(),
+            buffer: scene_uniform_buffer.device_buffer_memory().buffer(),
             offset: 0,
-            range: uniform_buffer.device_buffer_memory().size(),
+            range: scene_uniform_buffer.device_buffer_memory().size(),
         };
         let write_uniform_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
             VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
             2,
             &write_uniform_buffer_info);
+        let write_vertex_buffer_info = VkDescriptorBufferInfo {
+            buffer: vertex_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: vertex_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_vertex_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            3,
+            &write_vertex_buffer_info);
+        let write_index_buffer_info = VkDescriptorBufferInfo {
+            buffer: index_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: index_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_index_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            4,
+            &write_index_buffer_info);
         let write_descriptor_sets = vec![
             write_acceleration_structure,
             write_image,
             write_uniform_buffer,
+            write_vertex_buffer,
+            write_index_buffer,
         ];
         vkUpdateDescriptorSets(device.handle(), 
             write_descriptor_sets.len() as u32, 
@@ -931,7 +969,9 @@ impl RayTracingDescriptorSets {
             pipeline: Arc::clone(pipeline),
             acceleration_structure: Arc::clone(acceleration_structure),
             storage_image: Arc::clone(storage_image),
-            uniform_buffer: Arc::clone(uniform_buffer),
+            scene_uniform_buffer: Arc::clone(scene_uniform_buffer),
+            vertex_storage_buffer: Arc::clone(vertex_storage_buffer),
+            index_storage_buffer: Arc::clone(index_storage_buffer),
             descriptor_pool,
             descriptor_set,
         };
@@ -950,44 +990,6 @@ impl Drop for RayTracingDescriptorSets {
             let device = &self.device;
             vkDestroyDescriptorPool(device.handle(), self.descriptor_pool, ptr::null());
         }
-    }
-}
-
-pub struct UniformBuffer {
-    staging_buffer: Arc<DedicatedStagingBuffer>,
-}
-
-impl UniformBuffer {
-    pub fn new<Model>(command_pool: &Arc<CommandPool>, model: Model) -> Result<Arc<Self>> {
-        unsafe {
-            Self::init(command_pool, model)
-        }
-    }
-
-    unsafe fn init<Model>(command_pool: &Arc<CommandPool>, model: Model) -> Result<Arc<Self>> {
-        let model_size = std::mem::size_of::<Model>();
-        let staging_buffer = DedicatedStagingBuffer::new(command_pool, 
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT as VkBufferUsageFlags,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-            model_size as VkDeviceSize,
-        )
-            .unwrap();
-        staging_buffer.write(&model as *const _ as *const c_void, model_size);
-        let uniform_buffer = UniformBuffer {
-            staging_buffer,
-        };
-        Ok(Arc::new(uniform_buffer))
-    }
-
-    #[inline]
-    pub fn device_buffer_memory(&self) -> &Arc<DedicatedBufferMemory> {
-        self.staging_buffer.device_buffer_memory()
-    }
-
-    pub fn update<Model>(&self, model: &Model) {
-        let model_size = std::mem::size_of::<Model>();
-        assert_eq!(model_size as VkDeviceSize, self.staging_buffer.host_buffer_memory().size());
-        self.staging_buffer.write(model as *const _ as *const c_void, model_size);
     }
 }
 
