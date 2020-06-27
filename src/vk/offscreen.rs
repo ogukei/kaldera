@@ -391,7 +391,7 @@ impl OffscreenGraphicsPipeline {
         // vertex input
         let vertex_input_binding = VkVertexInputBindingDescription {
             binding: 0,
-            stride: std::mem::size_of::<Vertex>() as u32,
+            stride: std::mem::size_of::<Vec3>() as u32,
             inputRate: VkVertexInputRate::VK_VERTEX_INPUT_RATE_VERTEX,
         };
         let vertex_input_attributes = vec![
@@ -400,12 +400,6 @@ impl OffscreenGraphicsPipeline {
                 binding: 0,
                 format: VkFormat::VK_FORMAT_R32G32B32_SFLOAT,
                 offset: 0,
-            },
-            VkVertexInputAttributeDescription {
-                location: 1,
-                binding: 0,
-                format: VkFormat::VK_FORMAT_R32G32B32_SFLOAT,
-                offset: std::mem::size_of::<Vec3>() as u32,
             },
         ];
         let vertex_input_state = VkPipelineVertexInputStateCreateInfo {
@@ -418,8 +412,8 @@ impl OffscreenGraphicsPipeline {
             pVertexAttributeDescriptions: vertex_input_attributes.as_ptr(),
         };
         // shaders
-        let vertex_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.vert.spv")).unwrap();
-        let fragment_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.frag.spv")).unwrap();
+        let vertex_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/triangle.vert.spv")).unwrap();
+        let fragment_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/triangle.frag.spv")).unwrap();
         let shader_entry_point = CString::new("main").unwrap();
         let shader_stages = vec![
             VkPipelineShaderStageCreateInfo {
@@ -496,5 +490,82 @@ impl OffscreenGraphicsPipeline {
     #[inline]
     pub fn handle(&self) -> VkPipeline {
         self.handle
+    }
+}
+
+pub struct OffscreenGraphicsRender {
+    command_pool: Arc<CommandPool>,
+    pipeline: Arc<OffscreenGraphicsPipeline>,
+    vertex_staging_buffer: Arc<VertexStagingBuffer>,
+    framebuffer: Arc<OffscreenFramebuffer>,
+}
+
+impl OffscreenGraphicsRender {
+    pub fn new(
+        command_pool: &Arc<CommandPool>, 
+        pipeline: &Arc<OffscreenGraphicsPipeline>,
+        offscreen_framebuffer: &Arc<OffscreenFramebuffer>,
+        vertex_staging_buffer: &Arc<VertexStagingBuffer>,
+    ) -> Result<Arc<Self>> {
+        unsafe {
+            Self::init(command_pool, pipeline, offscreen_framebuffer, vertex_staging_buffer)
+        }
+    }
+
+    unsafe fn init(
+        command_pool: &Arc<CommandPool>, 
+        pipeline: &Arc<OffscreenGraphicsPipeline>,
+        offscreen_framebuffer: &Arc<OffscreenFramebuffer>,
+        vertex_staging_buffer: &Arc<VertexStagingBuffer>,
+    ) -> Result<Arc<Self>> {
+        let render = Self {
+            command_pool: Arc::clone(command_pool),
+            pipeline: Arc::clone(pipeline),
+            vertex_staging_buffer: Arc::clone(vertex_staging_buffer),
+            framebuffer: Arc::clone(offscreen_framebuffer),
+        };
+        Ok(Arc::new(render))
+    }
+
+    pub unsafe fn command(&self, command_buffer: VkCommandBuffer, area: VkRect2D) {
+        let render_pass = self.framebuffer.render_pass();
+        let staging_buffer = &self.vertex_staging_buffer;
+        let clear_values = vec![
+            VkClearValue {
+                values: [0.0, 0.0, 0.2, 1.0],
+            },
+            VkClearValue {
+                values: [1.0, 0.0, 0.0, 0.0],
+            },
+        ];
+        let render_pass_begin_info = VkRenderPassBeginInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            pNext: ptr::null(),
+            renderPass: render_pass.handle(),
+            framebuffer: self.framebuffer.handle(),
+            renderArea: area,
+            clearValueCount: clear_values.len() as u32,
+            pClearValues: clear_values.as_ptr(),
+        };
+        vkCmdBeginRenderPass(command_buffer, &render_pass_begin_info, VkSubpassContents::VK_SUBPASS_CONTENTS_INLINE);
+        let viewport = VkViewport {
+            x: 0.0,
+            y: area.extent.height as c_float,
+            width: area.extent.width as c_float,
+            height: -(area.extent.height as c_float),
+            minDepth: 0.0,
+            maxDepth: 1.0,
+        };
+        vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+        let scissor = area;
+        vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+        vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_GRAPHICS, self.pipeline.handle());
+        let offset: VkDeviceSize = 0;
+        let vertex_buffer: VkBuffer = staging_buffer.vertex_buffer().device_buffer_memory().buffer();
+        vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer, &offset);
+        let index_buffer: VkBuffer = staging_buffer.index_buffer().device_buffer_memory().buffer();
+        vkCmdBindIndexBuffer(command_buffer, index_buffer, 0, VkIndexType::VK_INDEX_TYPE_UINT32);
+        vkCmdDrawIndexed(command_buffer, staging_buffer.index_count() as u32, 1, 0, 0, 0);
+        vkCmdEndRenderPass(command_buffer);
     }
 }

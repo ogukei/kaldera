@@ -232,3 +232,25 @@ impl QueueFamily {
         self.property.has_graphics_queue_bit()
     }
 }
+
+pub struct PhysicalDeviceCapabilities {
+    devices: Vec<Arc<PhysicalDevice>>,
+}
+
+impl PhysicalDeviceCapabilities {
+    pub fn new(instance: &Arc<Instance>) -> Result<Arc<Self>> {
+        let devices = PhysicalDevicesBuilder::new(instance).build()?;
+        let capabilities = Self {
+            devices,
+        };
+        Ok(Arc::new(capabilities))
+    }
+
+    pub fn has_raytracing(&self) -> bool {
+        let name = CString::new("VK_KHR_ray_tracing")
+            .unwrap_or_default();
+        self.devices.iter()
+            .filter_map(|v| v.extension_properties().ok())
+            .any(|v| v.iter().any(|v| v.extension_name() == name))
+    }
+}

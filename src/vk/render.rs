@@ -6,7 +6,7 @@ use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuil
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::memory::{StagingBuffer, StagingBufferUsage};
 use super::swapchain::{SwapchainFramebuffers, SwapchainFramebuffer, SceneRenderPass};
-use super::offscreen::{OffscreenFramebuffer, OffscreenGraphicsPipeline};
+use super::offscreen::{OffscreenGraphicsRender};
 use super::scene::{SceneGraphicsRender};
 use super::raytrace::{RayTracingGraphicsRender};
 
@@ -143,12 +143,40 @@ impl GraphicsFramePrerender {
     }
 }
 
-pub struct GraphicsFrameRenderer {
+pub enum GraphicsFrameRenderer {
+    RayTracing(Arc<GraphicsFrameRayTracingRenderer>),
+    Rasterization(Arc<GraphicsFrameRasterizationRenderer>),
+}
+
+impl GraphicsFrameRenderer {
+    pub fn raytracing(renderer: &Arc<GraphicsFrameRayTracingRenderer>) -> Arc<Self> {
+        let renderer = Self::RayTracing(Arc::clone(renderer));
+        Arc::new(renderer)
+    }
+
+    pub fn rasterization(renderer: &Arc<GraphicsFrameRasterizationRenderer>) -> Arc<Self> {
+        let renderer = Self::Rasterization(Arc::clone(renderer));
+        Arc::new(renderer)
+    }
+
+    unsafe fn render(&self, 
+        command_pool: &Arc<CommandPool>, 
+        framebuffer: &SwapchainFramebuffer, 
+        area: VkRect2D,
+    ) -> GraphicsFramePrerender {
+        match &self {
+            &Self::RayTracing(renderer) => renderer.render(command_pool, framebuffer, area),
+            &Self::Rasterization(renderer) => renderer.render(command_pool, framebuffer, area),
+        }
+    }
+}
+
+pub struct GraphicsFrameRayTracingRenderer {
     raytracing_render: Arc<RayTracingGraphicsRender>,
     scene_render: Arc<SceneGraphicsRender>,
 }
 
-impl GraphicsFrameRenderer {
+impl GraphicsFrameRayTracingRenderer {
     pub fn new(
         raytracing_render: &Arc<RayTracingGraphicsRender>,
         scene_render: &Arc<SceneGraphicsRender>,
@@ -167,6 +195,36 @@ impl GraphicsFrameRenderer {
     ) -> GraphicsFramePrerender {
         let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
             self.raytracing_render.command(command_buffer, area);
+            self.scene_render.command(command_buffer, framebuffer, area);
+        });
+        GraphicsFramePrerender::new(command_buffer)
+    }
+}
+
+pub struct GraphicsFrameRasterizationRenderer {
+    offscreen_render: Arc<OffscreenGraphicsRender>,
+    scene_render: Arc<SceneGraphicsRender>,
+}
+
+impl GraphicsFrameRasterizationRenderer {
+    pub fn new(
+        offscreen_render: &Arc<OffscreenGraphicsRender>,
+        scene_render: &Arc<SceneGraphicsRender>,
+    ) -> Result<Arc<Self>> {
+        let renderer = Self {
+            offscreen_render: Arc::clone(offscreen_render),
+            scene_render: Arc::clone(scene_render),
+        };
+        Ok(Arc::new(renderer))
+    }
+
+    unsafe fn render(&self, 
+        command_pool: &Arc<CommandPool>, 
+        framebuffer: &SwapchainFramebuffer, 
+        area: VkRect2D,
+    ) -> GraphicsFramePrerender {
+        let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
+            self.offscreen_render.command(command_buffer, area);
             self.scene_render.command(command_buffer, framebuffer, area);
         });
         GraphicsFramePrerender::new(command_buffer)
