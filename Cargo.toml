@@ -3,11 +3,16 @@ name = "kaldera"
 version = "0.1.0"
 authors = ["Keitaro Oguri <ogukei256@gmail.com>"]
 edition = "2018"
+repository = "https://github.com/ogukei/kaldera"
+keywords = ["vulkan"]
+license-file = "LICENSE"
+readme = "README.md"
+description = "Lightweight 3D renderer powered by Vulkan"
 
 [dependencies]
-libc = "*"
-nalgebra-glm = { optional = true, version = "*" }
-gltf = { optional = true, version = "*" }
+libc = "0.2.71"
+nalgebra-glm = { optional = true, version = "0.7.0" }
+gltf = { optional = true, version = "0.15.2" }
 
 [features]
 default = ["with-nalgebra", "with-gltf"]
