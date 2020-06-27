@@ -12,7 +12,6 @@ macro_rules! log_debug {
 
 const DEFAULT_TIMEOUT: u64 = 10000000000; // 10sec
 
-
 mod error;
 mod instance;
 mod surface;

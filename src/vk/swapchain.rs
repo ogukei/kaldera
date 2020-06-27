@@ -115,7 +115,6 @@ impl Swapchain {
             vkAcquireNextImageKHR(self.device_queues.device().handle(), self.handle, crate::vk::DEFAULT_TIMEOUT, semaphore, ptr::null_mut(), image_index.as_mut_ptr())
                 .into_result()?;
             let image_index = image_index.assume_init() as usize;
-            log_debug!("Image {}", image_index);
             let image = self.images().get(image_index)
                 .ok_or_else(|| ErrorCode::SwapchainImageNotFound)?;
             Ok(image)

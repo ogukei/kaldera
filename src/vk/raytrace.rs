@@ -457,7 +457,7 @@ pub struct AccelerationVertexStagingBuffer {
 }
 
 impl AccelerationVertexStagingBuffer {
-    pub fn new<Vertex>(command_pool: &Arc<CommandPool>, vertices: Vec<Vertex>, indices: Vec<u32>) -> Arc<Self> {
+    pub fn new<Vertex>(command_pool: &Arc<CommandPool>, vertices: &[Vertex], indices: &[u32]) -> Arc<Self> {
         let vertex_buffer_size = std::mem::size_of::<Vertex>() * vertices.len();
         let vertex_buffer = DedicatedStagingBuffer::new(
             command_pool, 
@@ -690,9 +690,9 @@ impl RayTracingGraphicsPipeline {
         }
         let pipeline_layout = pipeline_layout.assume_init();
         // Shader Stages
-        let raygen_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.raygen.rgen.spv")).unwrap();
-        let rmiss_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.miss.rmiss.spv")).unwrap();
-        let rchit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/triangle.closesthit.rchit.spv")).unwrap();
+        let raygen_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/triangle.raygen.rgen.spv")).unwrap();
+        let rmiss_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/triangle.miss.rmiss.spv")).unwrap();
+        let rchit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/triangle.closesthit.rchit.spv")).unwrap();
         let shader_entry_point = CString::new("main").unwrap();
         const INDEX_RAYGEN: u32 = 0;
         const INDEX_MISS: u32 = 1;
@@ -982,6 +982,12 @@ impl UniformBuffer {
     #[inline]
     pub fn device_buffer_memory(&self) -> &Arc<DedicatedBufferMemory> {
         self.staging_buffer.device_buffer_memory()
+    }
+
+    pub fn update<Model>(&self, model: &Model) {
+        let model_size = std::mem::size_of::<Model>();
+        assert_eq!(model_size as VkDeviceSize, self.staging_buffer.host_buffer_memory().size());
+        self.staging_buffer.write(model as *const _ as *const c_void, model_size);
     }
 }
 
