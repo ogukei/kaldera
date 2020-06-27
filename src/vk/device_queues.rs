@@ -14,14 +14,48 @@ use libc::{c_float, c_void, c_char};
 use std::sync::Arc;
 use std::ffi::CString;
 
+enum DeviceQueuesCapabilities {
+    Default,
+    RayTracing,
+}
+
+impl DeviceQueuesCapabilities {
+    fn extension_names(&self) -> Vec<CString> {
+        match &self {
+            &Self::Default => vec![
+                CString::new("VK_KHR_swapchain").unwrap(),
+            ],
+            &Self::RayTracing => vec![
+                CString::new("VK_KHR_swapchain").unwrap(),
+                CString::new("VK_KHR_ray_tracing").unwrap(),
+                CString::new("VK_KHR_dedicated_allocation").unwrap(),
+                CString::new("VK_KHR_get_memory_requirements2").unwrap(),
+                CString::new("VK_KHR_buffer_device_address").unwrap(),
+                CString::new("VK_KHR_deferred_host_operations").unwrap(),
+                CString::new("VK_EXT_descriptor_indexing").unwrap(),
+                CString::new("VK_KHR_pipeline_library").unwrap(),
+            ],
+        }
+    }
+}
+
 pub struct DeviceQueuesBuilder {
     surface: Arc<Surface>,
+    capabilities: DeviceQueuesCapabilities,
 }
 
 impl DeviceQueuesBuilder {
     pub fn new(surface: &Arc<Surface>) -> Self {
         DeviceQueuesBuilder { 
             surface: Arc::clone(surface),
+            capabilities: DeviceQueuesCapabilities::Default,
+        }
+    }
+
+    pub fn with_raytracing(self) -> Self {
+        DeviceQueuesBuilder { 
+            surface: self.surface,
+            capabilities: DeviceQueuesCapabilities::RayTracing,
         }
     }
 
@@ -42,16 +76,7 @@ impl DeviceQueuesBuilder {
             .and_then(|a| present_family.map(|b| (a, b)))
             .ok_or_else(|| ErrorCode::SuitableQueueFamilyNotFound)?;
         // create infos
-        let extension_names = vec![
-            CString::new("VK_KHR_swapchain").unwrap(),
-            CString::new("VK_KHR_ray_tracing").unwrap(),
-            CString::new("VK_KHR_dedicated_allocation").unwrap(),
-            CString::new("VK_KHR_get_memory_requirements2").unwrap(),
-            CString::new("VK_KHR_buffer_device_address").unwrap(),
-            CString::new("VK_KHR_deferred_host_operations").unwrap(),
-            CString::new("VK_EXT_descriptor_indexing").unwrap(),
-            CString::new("VK_KHR_pipeline_library").unwrap(),
-        ];
+        let extension_names = self.capabilities.extension_names();
         let extension_name_ptrs: Vec<*const c_char> = extension_names.iter()
             .map(|v| v.as_ptr())
             .collect();

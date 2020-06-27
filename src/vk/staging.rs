@@ -21,7 +21,7 @@ pub struct VertexStagingBuffer {
 }
 
 impl VertexStagingBuffer {
-    pub fn new<Vertex>(command_pool: &Arc<CommandPool>, vertices: Vec<Vertex>, indices: Vec<u32>) -> Arc<Self> {
+    pub fn new<Vertex>(command_pool: &Arc<CommandPool>, vertices: &Vec<Vertex>, indices: &Vec<u32>) -> Arc<Self> {
         let vertex_buffer_size = std::mem::size_of::<Vertex>() * vertices.len();
         let vertex_buffer = StagingBuffer::new(
             command_pool, 
