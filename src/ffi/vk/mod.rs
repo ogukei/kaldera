@@ -2,6 +2,7 @@
 mod types;
 mod types_ext;
 mod types_ray;
+mod types_debug;
 mod impls;
 mod impls_ext;
 mod impls_ray;
@@ -12,3 +13,4 @@ pub use types_ext::*;
 pub use impls_ext::*;
 pub use types_ray::*;
 pub use impls_ray::*;
+pub use types_debug::*;

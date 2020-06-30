@@ -138,6 +138,7 @@ pub const VK_TRUE: VkBool32 = 1;
 pub const VK_FALSE: VkBool32 = 0;
 pub const VK_QUEUE_FAMILY_IGNORED: u32 = u32::max_value();
 pub const VK_MAX_EXTENSION_NAME_SIZE: size_t = 256;
+pub const VK_MAX_DESCRIPTION_SIZE: size_t = 256;
 pub const VK_SUBPASS_EXTERNAL: u32 = !0u32;
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkResult.html
@@ -401,6 +402,16 @@ pub struct VkInstanceCreateInfo {
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkAllocationCallbacks.html
 pub enum VkAllocationCallbacks {}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkLayerProperties.html
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct VkLayerProperties {
+    pub layerName: [c_char; VK_MAX_EXTENSION_NAME_SIZE],
+    pub specVersion: u32,
+    pub implementationVersion: u32,
+    pub description: [c_char; VK_MAX_DESCRIPTION_SIZE],
+}
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkPhysicalDeviceType.html
 #[repr(C)]
@@ -2324,6 +2335,11 @@ extern "C" {
         pCreateInfo: *const VkInstanceCreateInfo,
         pAllocator: *const VkAllocationCallbacks,
         pInstance: *mut VkInstance
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkEnumerateInstanceLayerProperties.html
+    pub fn vkEnumerateInstanceLayerProperties(
+        pPropertyCount: *mut u32,
+        pProperties: *mut VkLayerProperties,
     ) -> VkResult;
     // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/vkEnumeratePhysicalDevices.html
     pub fn vkEnumeratePhysicalDevices(

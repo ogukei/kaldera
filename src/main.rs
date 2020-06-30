@@ -15,7 +15,10 @@ struct Context {
 }
 
 fn main() {
-    let instance = Instance::new().unwrap();
+    let instance = InstanceBuilder::new()
+        .with_debug()
+        .build()
+        .unwrap();
     // surface
     let connection = XcbConnection::new();
     let window = XcbWindow::new(&connection, 800, 800);

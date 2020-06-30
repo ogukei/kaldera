@@ -36,24 +36,6 @@ impl VkApplicationInfo {
     }
 }
 
-impl VkInstanceCreateInfo {
-    pub unsafe fn new(
-        p_application_info: *const VkApplicationInfo,
-        extension_names: &Vec<*const c_char>,
-    ) -> Self {
-        VkInstanceCreateInfo { 
-            sType: VkStructureType::VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-            pNext: ptr::null(),
-            flags: 0,
-            pApplicationInfo: p_application_info,
-            enabledLayerCount: 0,
-            ppEnabledLayerNames: ptr::null(),
-            enabledExtensionCount: extension_names.len() as u32,
-            ppEnabledExtensionNames: extension_names.as_ptr(),
-        }
-    }
-}
-
 impl VkQueueFamilyProperties {
     pub fn new() -> Self {
         VkQueueFamilyProperties {
