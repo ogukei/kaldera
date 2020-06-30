@@ -2,6 +2,7 @@
 mod types;
 mod types_ext;
 mod types_ray;
+mod types_debug;
 mod impls;
 mod impls_ext;
 mod impls_ray;
