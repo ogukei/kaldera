@@ -14,6 +14,7 @@ const DEFAULT_TIMEOUT: u64 = 10000000000; // 10sec
 
 mod error;
 mod instance;
+mod debug;
 mod surface;
 mod device;
 mod device_queues;
@@ -31,6 +32,7 @@ mod scene;
 
 pub use error::*;
 pub use instance::*;
+pub use debug::*;
 pub use surface::*;
 pub use device::*;
 pub use device_queues::*;

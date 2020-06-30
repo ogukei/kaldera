@@ -4,40 +4,22 @@ use crate::ffi::vk::*;
 
 use super::error::Result;
 use super::error::ErrorCode;
+use super::debug::{DebugUtilsMessenger};
 
 use std::ptr;
-use std::mem;
-use std::ffi::{CStr, CString};
+use std::ffi::{CString};
 use std::mem::MaybeUninit;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
-#[derive(Debug)]
 pub struct Instance {
     handle: VkInstance,
+    messenger: Option<DebugUtilsMessenger>,
 }
 
 impl Instance {
-    pub fn new() -> Result<Arc<Instance>> {
-        let application_name = CString::new("kaldera")?;
-        let engine_name = CString::new("Kaldera Engine")?;
-        let app_info = VkApplicationInfo::new(application_name.as_ptr(), 0, engine_name.as_ptr(), 0);
-        let extension_names: Vec<CString> = vec![
-            CString::new("VK_KHR_surface").unwrap(),
-            CString::new("VK_KHR_xcb_surface").unwrap(),
-            CString::new("VK_KHR_get_physical_device_properties2").unwrap(),
-        ];
-        let extension_name_ptrs = extension_names.iter()
-            .map(|v| v.as_ptr())
-            .collect();
-        unsafe {
-            let instance_info = VkInstanceCreateInfo::new(&app_info, &extension_name_ptrs);
-            let mut handle = MaybeUninit::<VkInstance>::zeroed();
-            vkCreateInstance(&instance_info, ptr::null(), handle.as_mut_ptr())
-                .into_result()?;
-            let handle = handle.assume_init();
-            let instance = Instance { handle: handle };
-            Ok(Arc::new(instance))
-        }
+    pub fn new() -> Result<Arc<Self>> {
+        InstanceBuilder::new().build()
     }
 
     #[inline]
@@ -58,15 +40,143 @@ impl Instance {
             Ok(extensions)
         }
     }
+
+    pub fn layer_properties() -> Result<Vec<VkLayerProperties>> {
+        unsafe {
+            let mut count = MaybeUninit::<u32>::zeroed();
+            vkEnumerateInstanceLayerProperties(count.as_mut_ptr(), ptr::null_mut())
+                .into_result()?;
+            let size = count.assume_init() as usize;
+            let mut layers: Vec<VkLayerProperties> = Vec::with_capacity(size);
+            layers.resize(size, std::mem::zeroed());
+            vkEnumerateInstanceLayerProperties(count.as_mut_ptr(), layers.as_mut_ptr())
+                .into_result()?;
+            Ok(layers)
+        }
+    }
 }
 
 impl Drop for Instance {
     fn drop(&mut self) {
         log_debug!("Drop Instance");
         unsafe {
+            drop(self.messenger.take());
             vkDestroyInstance(self.handle, ptr::null());
             self.handle = ptr::null_mut();
         }
+    }
+}
+
+#[derive(Default)]
+pub struct InstanceBuilder<IsDebug = ()> {
+    _is_debug: IsDebug,
+}
+
+// default instance creation
+impl InstanceBuilder {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn build(self) -> Result<Arc<Instance>> {
+        unsafe {
+            let application_name = CString::new("kaldera")?;
+            let engine_name = CString::new("Kaldera Engine")?;
+            let app_info = VkApplicationInfo::new(application_name.as_ptr(), 0, engine_name.as_ptr(), 0);
+            let extension_names = Self::extension_names();
+            let extension_name_ptrs: Vec<_> = extension_names.iter()
+                .map(|v| v.as_ptr())
+                .collect();
+            {
+                let create_info = VkInstanceCreateInfo { 
+                    sType: VkStructureType::VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+                    pNext: ptr::null(),
+                    flags: 0,
+                    pApplicationInfo: &app_info,
+                    enabledLayerCount: 0,
+                    ppEnabledLayerNames: ptr::null(),
+                    enabledExtensionCount: extension_name_ptrs.len() as u32,
+                    ppEnabledExtensionNames: extension_name_ptrs.as_ptr(),
+                };
+                let mut handle = MaybeUninit::<VkInstance>::zeroed();
+                vkCreateInstance(&create_info, ptr::null(), handle.as_mut_ptr())
+                    .into_result()?;
+                let handle = handle.assume_init();
+                let instance = Instance { 
+                    handle,
+                    messenger: None,
+                };
+                Ok(Arc::new(instance))
+            }
+        }
+    }
+
+    pub fn with_debug(self) -> InstanceBuilder<PhantomData<()>> {
+        Default::default()
+    }
+
+    fn extension_names() -> Vec<CString> {
+        vec![
+            CString::new("VK_KHR_surface").unwrap(),
+            CString::new("VK_KHR_xcb_surface").unwrap(),
+            CString::new("VK_KHR_get_physical_device_properties2").unwrap(),
+        ]
+    }
+}
+
+// validation layer instance creation
+impl InstanceBuilder<PhantomData<()>> {
+    pub fn build(self) -> Result<Arc<Instance>> {
+        unsafe {
+            let application_name = CString::new("kaldera")?;
+            let engine_name = CString::new("Kaldera Engine")?;
+            let app_info = VkApplicationInfo::new(application_name.as_ptr(), 0, engine_name.as_ptr(), 0);
+            let layer_names = Self::layer_names();
+            let layer_name_ptrs: Vec<_> = layer_names.iter()
+                .map(|v| v.as_ptr())
+                .collect();
+            let extension_names = Self::extension_names();
+            let extension_name_ptrs: Vec<_> = extension_names.iter()
+                .map(|v| v.as_ptr())
+                .collect();
+            {
+                let create_info = VkInstanceCreateInfo { 
+                    sType: VkStructureType::VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+                    pNext: ptr::null(),
+                    flags: 0,
+                    pApplicationInfo: &app_info,
+                    enabledLayerCount: layer_name_ptrs.len() as u32,
+                    ppEnabledLayerNames: layer_name_ptrs.as_ptr(),
+                    enabledExtensionCount: extension_name_ptrs.len() as u32,
+                    ppEnabledExtensionNames: extension_name_ptrs.as_ptr(),
+                };
+                let mut handle = MaybeUninit::<VkInstance>::zeroed();
+                vkCreateInstance(&create_info, ptr::null(), handle.as_mut_ptr())
+                    .into_result()?;
+                let handle = handle.assume_init();
+                let messenger = Some(DebugUtilsMessenger::new(handle));
+                let instance = Instance { 
+                    handle,
+                    messenger,
+                };
+                Ok(Arc::new(instance))
+            }
+        }
+    }
+
+    fn layer_names() -> Vec<CString> {
+        vec![
+            CString::new("VK_LAYER_KHRONOS_validation").unwrap(),
+        ]
+    }
+
+    fn extension_names() -> Vec<CString> {
+        vec![
+            CString::new("VK_KHR_surface").unwrap(),
+            CString::new("VK_KHR_xcb_surface").unwrap(),
+            CString::new("VK_KHR_get_physical_device_properties2").unwrap(),
+            CString::new("VK_EXT_debug_utils").unwrap(),
+        ]
     }
 }
 
@@ -100,7 +210,6 @@ impl<'a> PhysicalDevicesBuilder<'a> {
     }
 }
 
-#[derive(Debug)]
 pub struct PhysicalDevice {
     handle: VkPhysicalDevice,
     instance: Arc<Instance>,

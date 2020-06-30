@@ -13,3 +13,4 @@ pub use types_ext::*;
 pub use impls_ext::*;
 pub use types_ray::*;
 pub use impls_ray::*;
+pub use types_debug::*;

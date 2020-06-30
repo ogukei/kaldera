@@ -141,15 +141,18 @@ mod dispatch {
     use super::*;
 
     // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateDebugUtilsMessengerEXT.html
-    pub fn vkCreateDebugUtilsMessengerEXT(
+    pub unsafe fn vkCreateDebugUtilsMessengerEXT(
         instance: VkInstance,
         pCreateInfo: *const VkDebugUtilsMessengerCreateInfoEXT,
         pAllocator: *const VkAllocationCallbacks,
         pMessenger: *mut VkDebugUtilsMessengerEXT,
     ) -> VkResult {
         const NAME: &str = "vkCreateDebugUtilsMessengerEXT\0";
-        unsafe {
+        {
             let addr = vkGetInstanceProcAddr(instance, NAME.as_ptr() as *const c_char);
+            if addr.is_null() {
+                return VkResult::VK_ERROR_EXTENSION_NOT_PRESENT
+            }
             let func: extern fn (
                 instance: VkInstance,
                 pCreateInfo: *const VkDebugUtilsMessengerCreateInfoEXT,
@@ -158,6 +161,28 @@ mod dispatch {
             ) -> VkResult;
             func = std::mem::transmute(addr);
             (func)(instance, pCreateInfo, pAllocator, pMessenger)
+        }
+    }
+
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroyDebugUtilsMessengerEXT.html
+    pub unsafe fn vkDestroyDebugUtilsMessengerEXT(
+        instance: VkInstance,
+        messenger: VkDebugUtilsMessengerEXT,
+        pAllocator: *const VkAllocationCallbacks,
+    ) {
+        const NAME: &str = "vkDestroyDebugUtilsMessengerEXT\0";
+        {
+            let addr = vkGetInstanceProcAddr(instance, NAME.as_ptr() as *const c_char);
+            if addr.is_null() {
+                return
+            }
+            let func: extern fn (
+                instance: VkInstance,
+                messenger: VkDebugUtilsMessengerEXT,
+                pAllocator: *const VkAllocationCallbacks,
+            ) -> ();
+            func = std::mem::transmute(addr);
+            (func)(instance, messenger, pAllocator)
         }
     }
 }
