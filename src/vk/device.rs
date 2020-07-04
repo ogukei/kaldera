@@ -269,6 +269,13 @@ impl Queue {
         vkQueueWaitIdle(self.handle())
             .into_result()
     }
+
+    pub fn wait_idle(&self) -> Result<()> {
+        unsafe {
+            vkQueueWaitIdle(self.handle())
+                .into_result()
+        }
+    }
 }
 
 pub enum ShaderModuleSource {
