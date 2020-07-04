@@ -354,6 +354,22 @@ pub struct VkStridedBufferRegionKHR {
     pub size: VkDeviceSize,
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPhysicalDeviceRayTracingFeaturesKHR.html
+#[repr(C)]
+pub struct VkPhysicalDeviceRayTracingFeaturesKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *mut c_void,
+    pub rayTracing: VkBool32,
+    pub rayTracingShaderGroupHandleCaptureReplay: VkBool32,
+    pub rayTracingShaderGroupHandleCaptureReplayMixed: VkBool32,
+    pub rayTracingAccelerationStructureCaptureReplay: VkBool32,
+    pub rayTracingIndirectTraceRays: VkBool32,
+    pub rayTracingIndirectAccelerationStructureBuild: VkBool32,
+    pub rayTracingHostAccelerationStructureCommands: VkBool32,
+    pub rayQuery: VkBool32,
+    pub rayTracingPrimitiveCulling: VkBool32,
+}
+
 mod dispatch {
     use super::*;
 

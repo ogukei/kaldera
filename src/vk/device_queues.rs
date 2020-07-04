@@ -80,6 +80,7 @@ impl DeviceQueuesBuilder {
         let extension_name_ptrs: Vec<*const c_char> = extension_names.iter()
             .map(|v| v.as_ptr())
             .collect();
+        let features = physical_device.features();
         let priority: c_float = 0.0;
         if (graphics_family as *const QueueFamily) == (present_family as *const QueueFamily) {
             // unique family
@@ -87,7 +88,7 @@ impl DeviceQueuesBuilder {
             let family = graphics_family;
             let family_index = family.index();
             let queue_create_info = VkDeviceQueueCreateInfo::new(family_index, 1, &priority);
-            let device_create_info = unsafe { VkDeviceCreateInfo::new(1, &queue_create_info, &extension_name_ptrs) };
+            let device_create_info = unsafe { VkDeviceCreateInfo::new(1, &queue_create_info, &extension_name_ptrs, features.features()) };
             unsafe {
                 let mut handle = MaybeUninit::<VkDevice>::zeroed();
                 vkCreateDevice(physical_device.handle(), &device_create_info, std::ptr::null(), handle.as_mut_ptr())
@@ -112,7 +113,8 @@ impl DeviceQueuesBuilder {
                 VkDeviceCreateInfo::new(
                     queue_create_infos.len() as u32, 
                     queue_create_infos.as_ptr(),
-                    &extension_name_ptrs)
+                    &extension_name_ptrs,
+                    features.features())
             };
             unsafe {
                 let mut handle = MaybeUninit::<VkDevice>::zeroed();

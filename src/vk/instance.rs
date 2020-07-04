@@ -287,6 +287,63 @@ impl PhysicalDevice {
             memory_type_index
         }
     }
+
+    pub fn features(&self) -> PhysicalDeviceFeatures {
+        unsafe {
+            PhysicalDeviceFeatures::init(self.handle)
+        }
+    }
+}
+
+pub struct PhysicalDeviceFeatures {
+    features: Box<MaybeUninit<VkPhysicalDeviceFeatures2>>,
+    device_address: Box<MaybeUninit<VkPhysicalDeviceBufferDeviceAddressFeatures>>,
+    indexing: Box<MaybeUninit<VkPhysicalDeviceDescriptorIndexingFeatures>>,
+    ray_tracing: Box<MaybeUninit<VkPhysicalDeviceRayTracingFeaturesKHR>>,
+}
+
+impl PhysicalDeviceFeatures {
+    unsafe fn init(handle: VkPhysicalDevice) -> Self {
+        let mut features: Box<MaybeUninit<VkPhysicalDeviceFeatures2>> = Box::new(MaybeUninit::zeroed());
+        let mut device_address: Box<MaybeUninit<VkPhysicalDeviceBufferDeviceAddressFeatures>> = Box::new(MaybeUninit::zeroed());
+        let mut indexing: Box<MaybeUninit<VkPhysicalDeviceDescriptorIndexingFeatures>> = Box::new(MaybeUninit::zeroed());
+        let mut ray_tracing: Box<MaybeUninit<VkPhysicalDeviceRayTracingFeaturesKHR>> = Box::new(MaybeUninit::zeroed());
+        {
+            let features = features.as_mut_ptr().as_mut().unwrap();
+            features.sType = VkStructureType::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+            let device_address = device_address.as_mut_ptr().as_mut().unwrap();
+            device_address.sType = VkStructureType::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+            let indexing = indexing.as_mut_ptr().as_mut().unwrap();
+            indexing.sType = VkStructureType::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+            let ray_tracing = ray_tracing.as_mut_ptr().as_mut().unwrap();
+            ray_tracing.sType = VkStructureTypeExtRay::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_FEATURES_KHR;
+        }
+        {
+            let features = features.as_mut_ptr().as_mut().unwrap();
+            features.pNext = device_address.as_mut_ptr() as *mut _;
+        }
+        {
+            let device_address = device_address.as_mut_ptr().as_mut().unwrap();
+            device_address.pNext = indexing.as_mut_ptr() as *mut _;
+        }
+        {
+            let indexing = indexing.as_mut_ptr().as_mut().unwrap();
+            indexing.pNext = ray_tracing.as_mut_ptr() as *mut _;
+        }
+        vkGetPhysicalDeviceFeatures2(handle, features.as_mut_ptr());
+        Self {
+            features,
+            device_address,
+            indexing,
+            ray_tracing,
+        }
+    }
+
+    pub fn features(&self) -> &VkPhysicalDeviceFeatures2 {
+        unsafe { 
+            self.features.as_ref().as_ptr().as_ref().unwrap() 
+        }
+    }
 }
 
 impl PhysicalDevice {
