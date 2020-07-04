@@ -493,6 +493,17 @@ impl OffscreenGraphicsPipeline {
     }
 }
 
+impl Drop for OffscreenGraphicsPipeline {
+    fn drop(&mut self) {
+        log_debug!("Drop OffscreenGraphicsPipeline");
+        unsafe {
+            let device = self.render_pass.device();
+            vkDestroyPipelineCache(device.handle(), self.cache, ptr::null());
+            vkDestroyPipeline(device.handle(), self.handle, ptr::null());
+        }
+    }
+}
+
 pub struct OffscreenGraphicsRender {
     command_pool: Arc<CommandPool>,
     pipeline: Arc<OffscreenGraphicsPipeline>,
