@@ -38,7 +38,7 @@ impl SceneGraphicsPipelineLayout {
 
     unsafe fn init(device: &Arc<Device>, color_image: &Arc<ColorImage>) -> Result<Arc<Self>> {
         let image_info = VkDescriptorImageInfo {
-            imageLayout: VkImageLayout::VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            imageLayout: VkImageLayout::VK_IMAGE_LAYOUT_GENERAL,
             imageView: color_image.view(),
             sampler: color_image.sampler(),
         };

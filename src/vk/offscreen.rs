@@ -7,7 +7,7 @@ use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, Sh
 use super::memory::{StagingBuffer, StagingBufferUsage, ImageMemory};
 use super::staging::VertexStagingBuffer;
 use super::geometry::{Vec3, Vec4};
-use super::image::{ColorImage, DepthStencilImage};
+use super::image::{ColorImage, DepthImage};
 use super::model::Vertex;
 use super::swapchain::{SwapchainFramebuffer};
 
@@ -36,7 +36,7 @@ impl OffscreenRenderPass {
                 stencilLoadOp: VkAttachmentLoadOp::VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 stencilStoreOp: VkAttachmentStoreOp::VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 initialLayout: VkImageLayout::VK_IMAGE_LAYOUT_UNDEFINED,
-                finalLayout: VkImageLayout::VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                finalLayout: VkImageLayout::VK_IMAGE_LAYOUT_GENERAL,
             },
             VkAttachmentDescription {
                 flags: 0,
@@ -138,7 +138,7 @@ pub struct OffscreenFramebuffer {
     handle: VkFramebuffer,
     device: Arc<Device>,
     color_image: Arc<ColorImage>,
-    depth_image: Arc<DepthStencilImage>,
+    depth_image: Arc<DepthImage>,
     render_pass: Arc<OffscreenRenderPass>,
 }
 
@@ -158,7 +158,7 @@ impl OffscreenFramebuffer {
             depth: 1,
         };
         let color_image = ColorImage::new(device, extent)?;
-        let depth_image = DepthStencilImage::new(device, extent)?;
+        let depth_image = DepthImage::new(device, extent)?;
         let render_pass = OffscreenRenderPass::new(device, color_image.image_format(), depth_image.image_format())?;
         let attachments = vec![
             color_image.view(),
@@ -206,7 +206,7 @@ impl OffscreenFramebuffer {
     }
 
     #[inline]
-    pub fn depth_image(&self) -> &Arc<DepthStencilImage> {
+    pub fn depth_image(&self) -> &Arc<DepthImage> {
         &self.depth_image
     }
 
@@ -490,6 +490,17 @@ impl OffscreenGraphicsPipeline {
     #[inline]
     pub fn handle(&self) -> VkPipeline {
         self.handle
+    }
+}
+
+impl Drop for OffscreenGraphicsPipeline {
+    fn drop(&mut self) {
+        log_debug!("Drop OffscreenGraphicsPipeline");
+        unsafe {
+            let device = self.render_pass.device();
+            vkDestroyPipelineCache(device.handle(), self.cache, ptr::null());
+            vkDestroyPipeline(device.handle(), self.handle, ptr::null());
+        }
     }
 }
 

@@ -42,9 +42,14 @@ fn main() {
             };
             context.uniform_buffer.update(&vec![model]);
         }
-        context.graphics_render.draw().unwrap();
+        if let None = context.graphics_render.draw().ok() {
+            break
+        }
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
+    context.device_queues.graphics_queue()
+        .wait_idle()
+        .unwrap();
 }
 
 fn raytracing_render(surface: &Arc<Surface>) -> Context {

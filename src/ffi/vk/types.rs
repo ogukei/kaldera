@@ -671,6 +671,14 @@ pub struct VkPhysicalDeviceFeatures {
     pub inheritedQueries: VkBool32,
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPhysicalDeviceFeatures2.html
+#[repr(C)]
+pub struct VkPhysicalDeviceFeatures2 {
+    pub sType: VkStructureType,
+    pub pNext: *mut c_void,
+    pub features: VkPhysicalDeviceFeatures,
+}
+
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkDeviceCreateInfo.html
 #[repr(C)]
 pub struct VkDeviceCreateInfo {
@@ -684,6 +692,43 @@ pub struct VkDeviceCreateInfo {
     pub enabledExtensionCount: u32,
     pub ppEnabledExtensionNames: *const *const c_char,
     pub pEnabledFeatures: *const VkPhysicalDeviceFeatures,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPhysicalDeviceBufferDeviceAddressFeatures.html
+#[repr(C)]
+pub struct VkPhysicalDeviceBufferDeviceAddressFeatures {
+    pub sType: VkStructureType,
+    pub pNext: *mut c_void,
+    pub bufferDeviceAddress: VkBool32,
+    pub bufferDeviceAddressCaptureReplay: VkBool32,
+    pub bufferDeviceAddressMultiDevice: VkBool32,
+}
+
+// @see https://khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPhysicalDeviceDescriptorIndexingFeatures.html
+#[repr(C)]
+pub struct VkPhysicalDeviceDescriptorIndexingFeatures {
+    pub sType: VkStructureType,
+    pub pNext: *mut c_void,
+    pub shaderInputAttachmentArrayDynamicIndexing: VkBool32,
+    pub shaderUniformTexelBufferArrayDynamicIndexing: VkBool32,
+    pub shaderStorageTexelBufferArrayDynamicIndexing: VkBool32,
+    pub shaderUniformBufferArrayNonUniformIndexing: VkBool32,
+    pub shaderSampledImageArrayNonUniformIndexing: VkBool32,
+    pub shaderStorageBufferArrayNonUniformIndexing: VkBool32,
+    pub shaderStorageImageArrayNonUniformIndexing: VkBool32,
+    pub shaderInputAttachmentArrayNonUniformIndexing: VkBool32,
+    pub shaderUniformTexelBufferArrayNonUniformIndexing: VkBool32,
+    pub shaderStorageTexelBufferArrayNonUniformIndexing: VkBool32,
+    pub descriptorBindingUniformBufferUpdateAfterBind: VkBool32,
+    pub descriptorBindingSampledImageUpdateAfterBind: VkBool32,
+    pub descriptorBindingStorageImageUpdateAfterBind: VkBool32,
+    pub descriptorBindingStorageBufferUpdateAfterBind: VkBool32,
+    pub descriptorBindingUniformTexelBufferUpdateAfterBind: VkBool32,
+    pub descriptorBindingStorageTexelBufferUpdateAfterBind: VkBool32,
+    pub descriptorBindingUpdateUnusedWhilePending: VkBool32,
+    pub descriptorBindingPartiallyBound: VkBool32,
+    pub descriptorBindingVariableDescriptorCount: VkBool32,
+    pub runtimeDescriptorArray: VkBool32,
 }
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkCommandPoolCreateInfo.html
@@ -2863,4 +2908,9 @@ extern "C" {
         device: VkDevice,
         pName: *const c_char,
     ) -> *const c_void;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetPhysicalDeviceFeatures2.html
+    pub fn vkGetPhysicalDeviceFeatures2(
+        physicalDevice: VkPhysicalDevice,
+        pFeatures: *mut VkPhysicalDeviceFeatures2,
+    );
 }

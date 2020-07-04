@@ -996,6 +996,10 @@ impl Drop for RayTracingDescriptorSets {
 pub struct ShaderBindingTable {
     staging_buffer: Arc<DedicatedStagingBuffer>,
     pipeline: Arc<RayTracingGraphicsPipeline>,
+    raygen_entry: VkStridedBufferRegionKHR,
+    miss_entry: VkStridedBufferRegionKHR,
+    hit_entry: VkStridedBufferRegionKHR,
+    callable_entry: VkStridedBufferRegionKHR,
 }
 
 impl ShaderBindingTable {
@@ -1008,28 +1012,80 @@ impl ShaderBindingTable {
     unsafe fn init(command_pool: &Arc<CommandPool>, pipeline: &Arc<RayTracingGraphicsPipeline>) -> Result<Arc<Self>> {
         let device = command_pool.queue().device();
         let properties = device.physical_device().properties_ray_tracing();
-        let table_size = (properties.shaderGroupHandleSize * 3) as VkDeviceSize;
+        let table_size = (properties.shaderGroupBaseAlignment * 3) as VkDeviceSize;
         let staging_buffer = DedicatedStagingBuffer::new(command_pool, 
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT as VkBufferUsageFlags 
                 | VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR as VkBufferUsageFlags,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
             table_size)
             .unwrap();
-        staging_buffer.update(table_size, |data| {
-            vkGetRayTracingShaderGroupHandlesKHR(device.handle(), pipeline.handle(), 0, 3, table_size as size_t, data)
+        staging_buffer.update(table_size, |buffer_data| {
+            let buffer_data = buffer_data as *mut u8;
+            let data_size = properties.shaderGroupHandleSize as usize * 3;
+            let mut data: Vec<u8> = vec![];
+            data.resize(data_size, 0);
+            vkGetRayTracingShaderGroupHandlesKHR(device.handle(), pipeline.handle(), 0, 3, data_size as size_t, data.as_mut_ptr() as *mut c_void)
                 .into_result()
                 .unwrap();
+            for i in 0..3isize {
+                let src_offset = i * properties.shaderGroupHandleSize as isize;
+                let dst_offset = i * properties.shaderGroupBaseAlignment as isize;
+                let src = data.as_mut_ptr().offset(src_offset);
+                let dst = buffer_data.offset(dst_offset);
+                std::ptr::copy_nonoverlapping(src, dst, properties.shaderGroupHandleSize as usize);
+            }
         });
+        // buffer region calculation
+        let alignment = properties.shaderGroupBaseAlignment as VkDeviceSize;
+        let handle_size = properties.shaderGroupHandleSize as VkDeviceSize;
+        let raygen_entry = VkStridedBufferRegionKHR {
+            buffer: staging_buffer.device_buffer_memory().buffer(),
+            offset: alignment * 0,
+            stride: alignment,
+            size: handle_size,
+        };
+        let miss_entry = VkStridedBufferRegionKHR {
+            buffer: staging_buffer.device_buffer_memory().buffer(),
+            offset: alignment * 1,
+            stride: alignment,
+            size: handle_size,
+        };
+        let hit_entry = VkStridedBufferRegionKHR {
+            buffer: staging_buffer.device_buffer_memory().buffer(),
+            offset: alignment * 2,
+            stride: alignment,
+            size: handle_size,
+        };
+        let callable_entry = VkStridedBufferRegionKHR::default();
         let table = Self {
             staging_buffer,
             pipeline: Arc::clone(pipeline),
+            raygen_entry,
+            miss_entry,
+            hit_entry,
+            callable_entry,
         };
         Ok(Arc::new(table))
     }
 
     #[inline]
-    fn buffer(&self) -> VkBuffer {
-        self.staging_buffer.device_buffer_memory().buffer()
+    fn raygen_entry(&self) -> &VkStridedBufferRegionKHR {
+        &self.raygen_entry
+    }
+
+    #[inline]
+    fn miss_entry(&self) -> &VkStridedBufferRegionKHR {
+        &self.miss_entry
+    }
+
+    #[inline]
+    fn hit_entry(&self) -> &VkStridedBufferRegionKHR {
+        &self.hit_entry
+    }
+
+    #[inline]
+    fn callable_entry(&self) -> &VkStridedBufferRegionKHR {
+        &self.callable_entry
     }
 }
 
@@ -1074,36 +1130,16 @@ impl RayTracingGraphicsRender {
     pub unsafe fn command(&self, command_buffer: VkCommandBuffer, area: VkRect2D) {
         let device = self.command_pool.queue().device();
         let shader_binding_table = &self.shader_binding_table;
-        let handle_size = self.properties.shaderGroupHandleSize as VkDeviceSize;
-        let raygen_entry = VkStridedBufferRegionKHR {
-            buffer: shader_binding_table.buffer(),
-            offset: handle_size * 0,
-            stride: 0,
-            size: handle_size,
-        };
-        let miss_entry = VkStridedBufferRegionKHR {
-            buffer: shader_binding_table.buffer(),
-            offset: handle_size * 1,
-            stride: 0,
-            size: handle_size,
-        };
-        let hit_entry = VkStridedBufferRegionKHR {
-            buffer: shader_binding_table.buffer(),
-            offset: handle_size * 2,
-            stride: 0,
-            size: handle_size,
-        };
-        let callable_entry = VkStridedBufferRegionKHR::default();
         let descriptor_set = self.descriptor_sets.handle();
         vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, self.pipeline.handle());
         vkCmdBindDescriptorSets(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
             self.pipeline.layout(), 0, 1, &descriptor_set, 0, ptr::null());
         dispatch_vkCmdTraceRaysKHR(device.handle(), 
             command_buffer, 
-            &raygen_entry, 
-            &miss_entry, 
-            &hit_entry, 
-            &callable_entry, 
+            shader_binding_table.raygen_entry(), 
+            shader_binding_table.miss_entry(), 
+            shader_binding_table.hit_entry(), 
+            shader_binding_table.callable_entry(), 
             area.extent.width, 
             area.extent.height, 
             1);

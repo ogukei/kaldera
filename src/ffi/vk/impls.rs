@@ -84,10 +84,11 @@ impl VkDeviceCreateInfo {
     pub unsafe fn new(
         create_queue_info_count: u32, 
         create_queue_infos: *const VkDeviceQueueCreateInfo,
-        extension_names: &Vec<*const c_char>) -> Self {
+        extension_names: &Vec<*const c_char>,
+        features: *const VkPhysicalDeviceFeatures2) -> Self {
         VkDeviceCreateInfo {
             sType: VkStructureType::VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-            pNext: ptr::null(),
+            pNext: features as *const c_void,
             flags: 0,
             queueCreateInfoCount: create_queue_info_count,
             pQueueCreateInfos: create_queue_infos,
