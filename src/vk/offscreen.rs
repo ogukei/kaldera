@@ -36,7 +36,7 @@ impl OffscreenRenderPass {
                 stencilLoadOp: VkAttachmentLoadOp::VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 stencilStoreOp: VkAttachmentStoreOp::VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 initialLayout: VkImageLayout::VK_IMAGE_LAYOUT_UNDEFINED,
-                finalLayout: VkImageLayout::VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                finalLayout: VkImageLayout::VK_IMAGE_LAYOUT_GENERAL,
             },
             VkAttachmentDescription {
                 flags: 0,
