@@ -8,7 +8,7 @@ use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, Qu
 use super::surface::{Surface};
 use super::device_queues::{DeviceQueues};
 use super::memory::ImageMemory;
-use super::image::DepthStencilImage;
+use super::image::DepthImage;
 
 use std::ptr;
 use std::mem;
@@ -355,7 +355,7 @@ impl Drop for SceneRenderPass {
 
 pub struct SwapchainFramebuffers {
     swapchain: Arc<Swapchain>,
-    depth_stencil: Arc<DepthStencilImage>,
+    depth_image: Arc<DepthImage>,
     render_pass: Arc<SceneRenderPass>,
     framebuffers: Vec<SwapchainFramebuffer>,
 }
@@ -370,16 +370,16 @@ impl SwapchainFramebuffers {
         let extent = swapchain.image_extent();
         let width = extent.width;
         let height = extent.height;
-        let depth_stencil = DepthStencilImage::new(device, VkExtent3D { width, height, depth: 1 })?;
-        let render_pass = SceneRenderPass::new(device, swapchain.image_format(), depth_stencil.image_format())?;
+        let depth_image = DepthImage::new(device, VkExtent3D { width, height, depth: 1 })?;
+        let render_pass = SceneRenderPass::new(device, swapchain.image_format(), depth_image.image_format())?;
         let framebuffers: Result<Vec<SwapchainFramebuffer>>;
         framebuffers = swapchain.images()
             .iter()
-            .map(|image| SwapchainFramebuffer::new(device, &render_pass, image, &depth_stencil, width, height))
+            .map(|image| SwapchainFramebuffer::new(device, &render_pass, image, &depth_image, width, height))
             .collect();
         let swapchain_framebuffers = SwapchainFramebuffers {
             swapchain: Arc::clone(swapchain),
-            depth_stencil,
+            depth_image,
             render_pass,
             framebuffers: framebuffers?,
         };
@@ -417,12 +417,12 @@ impl SwapchainFramebuffer {
         device: &Arc<Device>,
         render_pass: &Arc<SceneRenderPass>,
         swapchain_image: &SwapchainImage, 
-        depth_stencil: &DepthStencilImage,
+        depth_image: &DepthImage,
         width: u32,
         height: u32) -> Result<Self> {
         let attachments = vec![
             swapchain_image.view(),
-            depth_stencil.view(),
+            depth_image.view(),
         ];
         let create_info = VkFramebufferCreateInfo {
             sType: VkStructureType::VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
