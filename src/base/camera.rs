@@ -63,5 +63,6 @@ fn orbital(radius: f32, rotation_x: f32, rotation_y: f32) -> glm::Mat4 {
     // translation
     let dir = glm::vec3(0.0, 0.0, -radius);
     let translation = glm::translate(&glm::identity(), &dir);
-    translation * rotation
+    let center = glm::translate(&glm::identity(), &glm::vec3(0.0, 0.0, 0.0));
+    translation * rotation * center
 }

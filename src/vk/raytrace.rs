@@ -101,18 +101,30 @@ impl BottomLevelAccelerationStructureGeometry {
     pub fn new(
         num_vertices: u32,
         vertex_stride: VkDeviceSize,
+        vertex_offset_index: u32,
         vertex_buffer_memory: &Arc<DedicatedBufferMemory>,
         num_indices: u32,
+        index_offset_index: u32,
         index_buffer_memory: &Arc<DedicatedBufferMemory>,
     ) -> Result<Arc<Self>> {
-        unsafe { Self::init(num_vertices, vertex_stride, vertex_buffer_memory, num_indices, index_buffer_memory) }
+        unsafe { 
+            Self::init(num_vertices, 
+                vertex_stride, 
+                vertex_offset_index, 
+                vertex_buffer_memory, 
+                num_indices, 
+                index_offset_index, 
+                index_buffer_memory) 
+        }
     }
 
     unsafe fn init(
         num_vertices: u32,
         vertex_stride: VkDeviceSize,
+        vertex_offset_index: u32,
         vertex_buffer_memory: &Arc<DedicatedBufferMemory>,
         num_indices: u32,
+        index_offset_index: u32,
         index_buffer_memory: &Arc<DedicatedBufferMemory>,
     ) -> Result<Arc<Self>> {
         // assumes single type info
@@ -149,8 +161,8 @@ impl BottomLevelAccelerationStructureGeometry {
         };
         let offset = VkAccelerationStructureBuildOffsetInfoKHR {
             primitiveCount: primitive_count,
-            primitiveOffset: 0,
-            firstVertex: 0,
+            primitiveOffset: index_offset_index * std::mem::size_of::<u32>() as u32,
+            firstVertex: vertex_offset_index,
             transformOffset: 0,
         };
         let geometry = Self {
@@ -474,7 +486,7 @@ impl AccelerationVertexStagingBuffer {
                 | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
                 | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-            vertex_buffer_size as VkDeviceSize,
+            index_buffer_size as VkDeviceSize,
         ).unwrap();
         // transfer
         vertex_buffer.write(vertices.as_ptr() as *const c_void, vertex_buffer_size);
@@ -503,32 +515,68 @@ impl AccelerationVertexStagingBuffer {
     }
 }
 
+pub struct TopLevelAccelerationStructureInstance {
+    instance_custom_index: u32,
+    transform: VkTransformMatrixKHR,
+    bottom_level_acceleration_structure: Arc<BottomLevelAccelerationStructure>,
+}
+
+impl TopLevelAccelerationStructureInstance {
+    pub fn new(
+        instance_custom_index: u32, 
+        transform: VkTransformMatrixKHR,
+        bottom_level_acceleration_structure: &Arc<BottomLevelAccelerationStructure>,
+    ) -> Result<Arc<Self>> {
+        let instance = Self {
+            instance_custom_index,
+            transform,
+            bottom_level_acceleration_structure: Arc::clone(bottom_level_acceleration_structure),
+        };
+        Ok(Arc::new(instance))
+    }
+
+    #[inline]
+    fn instance_custom_index(&self) -> u32 {
+        self.instance_custom_index
+    }
+
+    #[inline]
+    fn bottom_level_acceleration_structure(&self) -> &Arc<BottomLevelAccelerationStructure> {
+        &self.bottom_level_acceleration_structure
+    }
+
+    #[inline]
+    fn transform(&self) -> VkTransformMatrixKHR {
+        self.transform.clone()
+    }
+}
+
 pub struct TopLevelAccelerationStructure {
     instances_buffer: Arc<DedicatedStagingBuffer>,
     structure: Arc<AccelerationStructure>,
-    bottom_level: Arc<BottomLevelAccelerationStructure>,
+    instances: Vec<Arc<TopLevelAccelerationStructureInstance>>,
 }
 
 impl TopLevelAccelerationStructure {
     pub fn new(
         command_pool: &Arc<CommandPool>, 
-        bottom_level: &Arc<BottomLevelAccelerationStructure>,
+        instances: Vec<Arc<TopLevelAccelerationStructureInstance>>,
     ) -> Result<Arc<Self>> {
         unsafe {
-            Self::init(command_pool, bottom_level)
+            Self::init(command_pool, instances)
         }
     }
 
     unsafe fn init(
         command_pool: &Arc<CommandPool>, 
-        bottom_level: &Arc<BottomLevelAccelerationStructure>,
+        instances: Vec<Arc<TopLevelAccelerationStructureInstance>>,
     ) -> Result<Arc<Self>> {
         let device = command_pool.queue().device();
         let type_info = VkAccelerationStructureCreateGeometryTypeInfoKHR {
             sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR,
             pNext: ptr::null(),
             geometryType: VkGeometryTypeKHR::VK_GEOMETRY_TYPE_INSTANCES_KHR,
-            maxPrimitiveCount: 1,
+            maxPrimitiveCount: instances.len() as u32,
             indexType: VkIndexType::VK_INDEX_TYPE_UINT16,
             maxVertexCount: 0,
             vertexFormat: VkFormat::VK_FORMAT_UNDEFINED,
@@ -546,25 +594,28 @@ impl TopLevelAccelerationStructure {
         };
         let structure = AccelerationStructure::new(device, &create_info)
             .unwrap();
-        let transform_matrix = VkTransformMatrixKHR {
-            matrix: [[1.0, 0.0, 0.0, 0.0], 
-                    [0.0, 1.0, 0.0, 0.0], 
-                    [0.0, 0.0, 1.0, 0.0]],
-        };
-        let instance = VkAccelerationStructureInstanceKHR {
-            transform: transform_matrix,
-            instanceCustomIndexAndMask: 0xff << 24,
-            instanceShaderBindingTableRecordOffsetAndFlags: 
-                (VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR as VkFlags) << 24,
-            accelerationStructureReference: bottom_level.structure_device_address(),
-        };
-        let instances_size = std::mem::size_of::<VkAccelerationStructureInstanceKHR>();
+        let instance_structs: Vec<_> = instances.iter()
+            .map(|instance| {
+                let custom_index = instance.instance_custom_index();
+                let structure = instance.bottom_level_acceleration_structure();
+                let transform = instance.transform();
+                let instance = VkAccelerationStructureInstanceKHR {
+                    transform: transform,
+                    instanceCustomIndexAndMask: (0xff << 24) | (custom_index & ((1u32 << 25) - 1)),
+                    instanceShaderBindingTableRecordOffsetAndFlags: 
+                        (VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR as VkFlags) << 24,
+                    accelerationStructureReference: structure.structure_device_address(),
+                };
+                instance
+            })
+            .collect();
+        let instances_size = instance_structs.len() * std::mem::size_of::<VkAccelerationStructureInstanceKHR>();
         let instances_buffer = DedicatedStagingBuffer::new(command_pool, 
             VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags, 
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
             instances_size as VkDeviceSize)
             .unwrap();
-        instances_buffer.write(&instance as *const _ as *const c_void, instances_size);
+        instances_buffer.write(instance_structs.as_ptr() as *const c_void, instances_size);
         // build
         {
             let geometry_instances = VkAccelerationStructureGeometryInstancesDataKHR {
@@ -607,7 +658,7 @@ impl TopLevelAccelerationStructure {
                 scratchData: scratch_buffer_memory.buffer_device_address(),
             };
             let offset = VkAccelerationStructureBuildOffsetInfoKHR {
-                primitiveCount: 1,
+                primitiveCount: instances.len() as u32,
                 primitiveOffset: 0,
                 firstVertex: 0,
                 transformOffset: 0,
@@ -625,7 +676,7 @@ impl TopLevelAccelerationStructure {
         let top_level_structure = TopLevelAccelerationStructure {
             instances_buffer,
             structure,
-            bottom_level: Arc::clone(bottom_level),
+            instances,
         };
         Ok(Arc::new(top_level_structure))
     }
@@ -682,6 +733,16 @@ impl RayTracingGraphicsPipeline {
                     VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
                     VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
                     4,
+                ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    5,
+                ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    6,
                 ),
             ];
             let create_info = VkDescriptorSetLayoutCreateInfo::new(bindings.len() as u32, bindings.as_ptr());
@@ -842,8 +903,10 @@ pub struct RayTracingDescriptorSets {
     acceleration_structure: Arc<TopLevelAccelerationStructure>,
     storage_image: Arc<ColorImage>,
     scene_uniform_buffer: Arc<UniformBuffer>,
-    vertex_storage_buffer: Arc<StorageBuffer>,
-    index_storage_buffer: Arc<StorageBuffer>,
+    vertex_storage_buffer: Arc<DedicatedStagingBuffer>,
+    index_storage_buffer: Arc<DedicatedStagingBuffer>,
+    normal_storage_buffer: Arc<DedicatedStagingBuffer>,
+    description_storage_buffer: Arc<DedicatedStagingBuffer>,
     descriptor_pool: VkDescriptorPool,
     descriptor_set: VkDescriptorSet,
 }
@@ -854,11 +917,20 @@ impl RayTracingDescriptorSets {
         acceleration_structure: &Arc<TopLevelAccelerationStructure>,
         storage_image: &Arc<ColorImage>,
         scene_uniform_buffer: &Arc<UniformBuffer>,
-        vertex_storage_buffer: &Arc<StorageBuffer>,
-        index_storage_buffer: &Arc<StorageBuffer>,
+        vertex_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        index_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        normal_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        description_storage_buffer: &Arc<DedicatedStagingBuffer>,
     ) -> Result<Arc<Self>> {
         unsafe {
-            Self::init(pipeline, acceleration_structure, storage_image, scene_uniform_buffer, vertex_storage_buffer, index_storage_buffer)
+            Self::init(pipeline, 
+                acceleration_structure, 
+                storage_image, 
+                scene_uniform_buffer, 
+                vertex_storage_buffer, 
+                index_storage_buffer, 
+                normal_storage_buffer, 
+                description_storage_buffer)
         }
     }
 
@@ -867,8 +939,10 @@ impl RayTracingDescriptorSets {
         acceleration_structure: &Arc<TopLevelAccelerationStructure>,
         storage_image: &Arc<ColorImage>,
         scene_uniform_buffer: &Arc<UniformBuffer>,
-        vertex_storage_buffer: &Arc<StorageBuffer>,
-        index_storage_buffer: &Arc<StorageBuffer>,
+        vertex_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        index_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        normal_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        description_storage_buffer: &Arc<DedicatedStagingBuffer>,
     ) -> Result<Arc<Self>> {
         let device = pipeline.device();
         // Descriptor Pool
@@ -878,6 +952,8 @@ impl RayTracingDescriptorSets {
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
             ];
@@ -952,12 +1028,32 @@ impl RayTracingDescriptorSets {
             VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             4,
             &write_index_buffer_info);
+        let write_normal_buffer_info = VkDescriptorBufferInfo {
+            buffer: normal_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: normal_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_normal_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            5,
+            &write_normal_buffer_info);
+        let write_description_buffer_info = VkDescriptorBufferInfo {
+            buffer: description_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: description_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_description_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            6,
+            &write_description_buffer_info);
         let write_descriptor_sets = vec![
             write_acceleration_structure,
             write_image,
             write_uniform_buffer,
             write_vertex_buffer,
             write_index_buffer,
+            write_normal_buffer,
+            write_description_buffer,
         ];
         vkUpdateDescriptorSets(device.handle(), 
             write_descriptor_sets.len() as u32, 
@@ -972,6 +1068,8 @@ impl RayTracingDescriptorSets {
             scene_uniform_buffer: Arc::clone(scene_uniform_buffer),
             vertex_storage_buffer: Arc::clone(vertex_storage_buffer),
             index_storage_buffer: Arc::clone(index_storage_buffer),
+            normal_storage_buffer: Arc::clone(normal_storage_buffer),
+            description_storage_buffer: Arc::clone(description_storage_buffer),
             descriptor_pool,
             descriptor_set,
         };

@@ -248,6 +248,7 @@ pub struct VkAccelerationStructureBuildGeometryInfoKHR {
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkTransformMatrixKHR.html
 #[repr(C)]
+#[derive(Copy, Clone)]
 pub struct VkTransformMatrixKHR {
     pub matrix: [[c_float; 4]; 3],
 }

@@ -57,27 +57,10 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
         .with_raytracing()
         .build()
         .unwrap();
-    let model = BoxModel::new().unwrap();
-    let vertices = model.vertices();
-    let indices = model.indices();
-    let vertex_normals = model.vertex_normals();
-    let num_vertices = vertices.len() as u32;
-    let num_indices = indices.len() as u32;
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
-    let staging_buffer = AccelerationVertexStagingBuffer::new(&command_pool, &vertices, &indices);
-    let geometry = BottomLevelAccelerationStructureGeometry::new(
-        num_vertices, 
-        std::mem::size_of::<Vec3>() as VkDeviceSize, 
-        staging_buffer.vertex_buffer().device_buffer_memory(),
-        num_indices,
-        staging_buffer.index_buffer().device_buffer_memory(),
-    )
-        .unwrap();
-    let geometries = vec![geometry];
-    let bottom_level_structure = BottomLevelAccelerationStructure::new(&command_pool, geometries)
-        .unwrap();
-    let top_level_structure = TopLevelAccelerationStructure::new(&command_pool, &bottom_level_structure)
-        .unwrap();
+    let scene_asset = SceneAsset::new().unwrap();
+    let scene = SceneBuilder::new(&scene_asset)
+        .build(&command_pool);
     let raytracing_pipeline = RayTracingGraphicsPipeline::new(device_queues.device())
         .unwrap();
     let camera = OrbitalCamera::new();
@@ -93,15 +76,16 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
     };
     let framebuffer = OffscreenFramebuffer::new(device_queues.device(), extent)
         .unwrap();
-    let vertex_storage_buffer = StorageBuffer::new(&command_pool, &vertex_normals).unwrap();
-    let index_storage_buffer = StorageBuffer::new(&command_pool, &indices).unwrap();
     let descriptor_sets = RayTracingDescriptorSets::new(
         &raytracing_pipeline, 
-        &top_level_structure, 
-        framebuffer.color_image(), 
-        &uniform_buffer, 
-        &vertex_storage_buffer,
-        &index_storage_buffer)
+        scene.top_level_acceleration_structure(), 
+        framebuffer.color_image(),
+        &uniform_buffer,
+        scene.vertex_staging_buffer(),
+        scene.index_staging_buffer(),
+        scene.normal_staging_buffer(),
+        scene.description_staging_buffer(),
+    )
         .unwrap();
     let raytracing_render = RayTracingGraphicsRender::new(&command_pool, &raytracing_pipeline, &descriptor_sets)
         .unwrap();
