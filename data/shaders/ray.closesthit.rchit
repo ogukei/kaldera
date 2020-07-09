@@ -1,18 +1,21 @@
 #version 460
 #extension GL_EXT_ray_tracing : enable
 #extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_scalar_block_layout : enable
 
 // https://github.com/nvpro-samples/vk_raytracing_tutorial_KHR/blob/master/ray_tracing__simple/shaders/raytrace.rchit
 // https://github.com/SaschaWillems/Vulkan-Samples/tree/fc55746e485fbaa1aa0ecafd388759e6c6d00bf5/samples/extensions/raytracing_basic
 
-struct Vertex {
-  vec4 position;
-  vec4 normal;
+struct MeshPrimitiveDescription {
+  uint vertexOffset;
+  uint indexOffset;
 };
 
 layout(location = 0) rayPayloadInEXT vec3 hitValue;
-layout(binding = 3) buffer Vertices { Vertex v[]; } vertices[];
-layout(binding = 4) buffer Indices { uint i[]; } indices[];
+layout(binding = 3) readonly buffer Vertices { float vertices[]; };
+layout(binding = 4) readonly buffer Indices { uint indices[]; };
+layout(binding = 5) readonly buffer Normals { float normals[]; };
+layout(binding = 6) readonly buffer Descriptions { MeshPrimitiveDescription descriptions[]; };
 hitAttributeEXT vec3 attribs;
 
 float lightDiffuse(vec3 lightPosition, vec3 position, vec3 normal) {
@@ -24,19 +27,38 @@ float lightDiffuse(vec3 lightPosition, vec3 position, vec3 normal) {
   return dotNL;
 }
 
+vec3 vertexAt(uint index) {
+  return vec3(vertices[nonuniformEXT(3 * index + 0)],
+              vertices[nonuniformEXT(3 * index + 1)],
+              vertices[nonuniformEXT(3 * index + 2)]);
+}
+
+vec3 normalAt(uint index) {
+  return vec3(normals[nonuniformEXT(3 * index + 0)],
+              normals[nonuniformEXT(3 * index + 1)],
+              normals[nonuniformEXT(3 * index + 2)]);
+}
+
 void main() {
   const vec3 barycentrics = vec3(1.0f - attribs.x - attribs.y, attribs.x, attribs.y);
-  // Object of this instance
-  uint objId = 0;
-  // Indices of the triangle
-  ivec3 ind = ivec3(indices[nonuniformEXT(objId)].i[3 * gl_PrimitiveID + 0],   //
-                    indices[nonuniformEXT(objId)].i[3 * gl_PrimitiveID + 1],   //
-                    indices[nonuniformEXT(objId)].i[3 * gl_PrimitiveID + 2]);  //
+  MeshPrimitiveDescription desc = descriptions[gl_InstanceCustomIndexEXT];
+  uint indexOffset  = desc.indexOffset + (3 * gl_PrimitiveID);
+  uint vertexOffset = desc.vertexOffset;
+  ivec3 triangleIndex = ivec3(indices[nonuniformEXT(indexOffset + 0)],
+                              indices[nonuniformEXT(indexOffset + 1)],
+                              indices[nonuniformEXT(indexOffset + 2)]);
+  triangleIndex += ivec3(vertexOffset);
   // Vertex of the triangle
-  Vertex v0 = vertices[nonuniformEXT(objId)].v[ind.x];
-  Vertex v1 = vertices[nonuniformEXT(objId)].v[ind.y];
-  Vertex v2 = vertices[nonuniformEXT(objId)].v[ind.z];
-  vec3 normal = v0.normal.xyz * barycentrics.x + v1.normal.xyz * barycentrics.y + v2.normal.xyz * barycentrics.z;
-  vec3 worldPos = v0.position.xyz * barycentrics.x + v1.position.xyz * barycentrics.y + v2.position.xyz * barycentrics.z;
-  hitValue = vec3(lightDiffuse(vec3(10.0f, 15.0f, 8.0f), worldPos, normal));
+  vec3 v0 = vertexAt(triangleIndex.x);
+  vec3 v1 = vertexAt(triangleIndex.y);
+  vec3 v2 = vertexAt(triangleIndex.z);
+  // Normal of the triangle
+  vec3 n0 = normalAt(triangleIndex.x);
+  vec3 n1 = normalAt(triangleIndex.y);
+  vec3 n2 = normalAt(triangleIndex.z);
+  vec3 objectNormal = n0 * barycentrics.x + n1 * barycentrics.y + n2 * barycentrics.z;
+  vec3 objectPosition = v0 * barycentrics.x + v1 * barycentrics.y + v2 * barycentrics.z;
+  vec3 worldNormal = vec3(objectNormal * gl_WorldToObjectEXT);
+  vec3 worldPosition = vec3(gl_ObjectToWorldEXT * vec4(objectPosition, 1.0));
+  hitValue = vec3(lightDiffuse(vec3(10.0f, 15.0f, 8.0f), worldPosition, worldNormal));
 }
