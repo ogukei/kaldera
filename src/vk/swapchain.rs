@@ -14,7 +14,7 @@ use std::ptr;
 use std::mem;
 use std::mem::MaybeUninit;
 use libc::{c_float, c_void};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct Swapchain {
     handle: VkSwapchainKHR,
@@ -22,6 +22,7 @@ pub struct Swapchain {
     images: Vec<SwapchainImage>,
     image_format: VkFormat,
     image_extent: VkExtent2D,
+    image_index: Mutex<Option<usize>>,
 }
 
 impl Swapchain {
@@ -104,6 +105,7 @@ impl Swapchain {
                 images: images?,
                 image_format,
                 image_extent: extent,
+                image_index: Mutex::new(None),
             };
             Ok(Arc::new(swapchain))
         }
@@ -117,8 +119,21 @@ impl Swapchain {
             let image_index = image_index.assume_init() as usize;
             let image = self.images().get(image_index)
                 .ok_or_else(|| ErrorCode::SwapchainImageNotFound)?;
+            {
+                let mut guard = self.image_index.lock().unwrap();
+                *guard = Some(image_index);
+            }
             Ok(image)
         }
+    }
+
+    pub fn current_image(&self) -> Option<&SwapchainImage> {
+        let image_index: Option<usize>;
+        {
+            let guard = self.image_index.lock().unwrap();
+            image_index = *guard;
+        }
+        self.images().get(image_index?)
     }
 
     pub fn queue_present<'a>(&'a self, image: &'a SwapchainImage, semaphore: VkSemaphore) -> Result<()> {

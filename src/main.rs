@@ -36,12 +36,13 @@ fn main() {
     loop {
         if let Some(event) = interpreter.next() {
             camera.apply(event);
-            let model = RayTracingUniformBufferModel {
-                view_inverse: camera.view_inverse(),
-                proj_inverse: camera.projection_inverse(),
-            };
-            context.uniform_buffer.update(&vec![model]);
         }
+        camera.update(0.001);
+        let model = RayTracingUniformBufferModel {
+            view_inverse: camera.view_inverse(),
+            proj_inverse: camera.projection_inverse(),
+        };
+        context.uniform_buffer.update(&vec![model]);
         if let None = context.graphics_render.draw().ok() {
             break
         }

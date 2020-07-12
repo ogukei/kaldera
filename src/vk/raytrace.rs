@@ -3,7 +3,7 @@ use crate::ffi::vk::*;
 use super::error::Result;
 use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
-use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
+use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource, CommandBufferRecording};
 use super::memory::{StorageBuffer, UniformBuffer, DedicatedBufferMemory, DedicatedStagingBuffer};
 use super::image::{ColorImage};
 
@@ -12,7 +12,6 @@ use std::mem;
 use std::mem::MaybeUninit;
 use libc::{c_float, c_void, size_t};
 use std::sync::Arc;
-use std::io::Read;
 use std::ffi::CString;
 
 use VkStructureType::*;
@@ -28,30 +27,28 @@ use VkGeometryFlagBitsKHR::*;
 use VkPipelineStageFlagBits::*;
 use VkGeometryInstanceFlagBitsKHR::*;
 
-pub struct BottomLevelAccelerationStructure {
-    objects: Vec<Arc<BottomLevelAccelerationStructureGeometryObject>>,
+pub struct BottomLevelAccelerationStructuresBuilder<'a> {
+    command_pool: &'a Arc<CommandPool>,
+    geometries: &'a [Arc<BottomLevelAccelerationStructureGeometry>],
 }
 
-impl BottomLevelAccelerationStructure {
-    pub fn new(
-        command_pool: &Arc<CommandPool>,
-        geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
-    ) -> Result<Arc<Self>> {
-        unsafe { Self::init(command_pool, geometries) }
+impl<'a> BottomLevelAccelerationStructuresBuilder<'a> {
+    pub fn new(command_pool: &'a Arc<CommandPool>, geometries: &'a [Arc<BottomLevelAccelerationStructureGeometry>]) -> Self {
+        Self {
+            command_pool,
+            geometries,
+        }
     }
 
-    unsafe fn init(
-        command_pool: &Arc<CommandPool>,
-        geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
-    ) -> Result<Arc<Self>> {
+    pub fn build(self) -> Result<Vec<Arc<BottomLevelAccelerationStructure>>> {
+        let command_pool = self.command_pool;
         let device = command_pool.queue().device();
-        let builders = geometries.into_iter()
-            .map(|v| BottomLevelAccelerationStructureGeometryBuilder::new(device, v))
+        let recording = CommandBufferRecording::new_onetime_submit(command_pool)?;
+        let builds = self.geometries.iter()
+            .map(|v| BottomLevelAccelerationStructureBuild::new(&recording, std::slice::from_ref(v)))
             .collect::<Result<Vec<_>>>()?;
-        let scratch_size = builders.iter()
-            .map(|v| v.structure())
-            .map(|v| v.scratch_memory_requirements())
-            .map(|v| v.memoryRequirements.size)
+        let scratch_size = builds.iter()
+            .map(|v| v.scratch_size())
             .max()
             .unwrap();
         let scratch_buffer_memory = DedicatedBufferMemory::new(
@@ -59,33 +56,85 @@ impl BottomLevelAccelerationStructure {
             VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR as VkBufferUsageFlags
                 | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-            scratch_size)
+            scratch_size,
+        )
             .unwrap();
-        let objects: Vec<_> = builders.into_iter()
-            .map(|v| v.build(command_pool, &scratch_buffer_memory))
+        let objects: Vec<_> = builds.into_iter()
+            .map(|v| v.build(&scratch_buffer_memory))
             .collect();
-        // build
-        {
-            let command_buffers: Vec<_> = objects.iter()
-                .map(|v| v.command_buffer().handle())
-                .collect();
+        let command_buffer = recording.complete();
+        unsafe {
+            let command_buffer_handle = command_buffer.handle();
             command_pool.queue()
-                .submit_then_wait(command_buffers.as_slice())
+                .submit_then_wait(std::slice::from_ref(&command_buffer_handle))
                 .unwrap();
         }
-        let objects: Vec<_> = objects.into_iter()
-            .map(|v| v.finalize())
-            .collect();
-        let structure = BottomLevelAccelerationStructure {
-            objects,
+        objects.into_iter()
+            .map(BottomLevelAccelerationStructure::new)
+            .collect()
+    }
+}
+
+struct BottomLevelAccelerationStructureBuild<'a, 'b: 'a> {
+    recording: &'a CommandBufferRecording<'b>,
+    scratch_size: VkDeviceSize,
+    geometry_builds: Vec<BottomLevelAccelerationStructureGeometryBuild>,
+}
+
+impl<'a, 'b: 'a> BottomLevelAccelerationStructureBuild<'a, 'b> {
+    fn new(
+        recording: &'b CommandBufferRecording<'a>, 
+        geometries: &[Arc<BottomLevelAccelerationStructureGeometry>],
+    ) -> Result<Self> {
+        unsafe {
+            let command_pool = recording.command_pool();
+            let device = command_pool.queue().device();
+            let geometry_builds = geometries.iter()
+                .map(|v| BottomLevelAccelerationStructureGeometryBuild::new(device, v))
+                .collect::<Result<Vec<_>>>()?;
+            let scratch_size = geometry_builds.iter()
+                .map(|v| v.structure())
+                .map(|v| v.scratch_memory_requirements())
+                .map(|v| v.memoryRequirements.size)
+                .max()
+                .unwrap();
+            let builder = Self {
+                recording,
+                geometry_builds,
+                scratch_size,
+            };
+            Ok(builder)
+        }
+    }
+
+    #[inline]
+    fn scratch_size(&self) -> VkDeviceSize {
+        self.scratch_size
+    }
+
+    fn build(self, scratch_buffer: &Arc<DedicatedBufferMemory>) -> BottomLevelAccelerationStructureGeometryObject {
+        assert_eq!(self.geometry_builds.len(), 1, "multiple geometries not supported yet");
+        let build = self.geometry_builds.into_iter().nth(0).unwrap();
+        unsafe {
+            build.build(self.recording, scratch_buffer)
+        }
+    }
+}
+
+pub struct BottomLevelAccelerationStructure {
+    object: BottomLevelAccelerationStructureGeometryObject,
+}
+
+impl BottomLevelAccelerationStructure {
+    fn new(object: BottomLevelAccelerationStructureGeometryObject) -> Result<Arc<Self>> {
+        let structure = Self {
+            object,
         };
         Ok(Arc::new(structure))
     }
 
     fn structure_device_address(&self) -> VkDeviceAddress {
-        assert_eq!(self.objects.len(), 1, "multiple geometries not supported yet");
-        let object = self.objects.first().unwrap();
-        object.structure_device_address()
+        self.object.structure().device_address()
     }
 }
 
@@ -188,13 +237,13 @@ impl BottomLevelAccelerationStructureGeometry {
     }
 }
 
-pub struct BottomLevelAccelerationStructureGeometryBuilder {
+pub struct BottomLevelAccelerationStructureGeometryBuild {
     geometry: Arc<BottomLevelAccelerationStructureGeometry>,
     structure: Arc<AccelerationStructure>,
 }
 
-impl BottomLevelAccelerationStructureGeometryBuilder {
-    unsafe fn new(device: &Arc<Device>, geometry: Arc<BottomLevelAccelerationStructureGeometry>) -> Result<Self> {
+impl BottomLevelAccelerationStructureGeometryBuild {
+    unsafe fn new(device: &Arc<Device>, geometry: &Arc<BottomLevelAccelerationStructureGeometry>) -> Result<Self> {
         let create_info = VkAccelerationStructureCreateInfoKHR {
             sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
             pNext: ptr::null(),
@@ -208,7 +257,7 @@ impl BottomLevelAccelerationStructureGeometryBuilder {
         let structure = AccelerationStructure::new(device, &create_info)
             .unwrap();
         let object = Self {
-            geometry: geometry,
+            geometry: Arc::clone(geometry),
             structure,
         };
         Ok(object)
@@ -219,109 +268,63 @@ impl BottomLevelAccelerationStructureGeometryBuilder {
     }
 
     unsafe fn build(self, 
-        command_pool: &Arc<CommandPool>, 
+        recording: &CommandBufferRecording, 
         scratch_buffer_memory: &Arc<DedicatedBufferMemory>,
-    ) -> BottomLevelAccelerationStructureGeometryBuild {
+    ) -> BottomLevelAccelerationStructureGeometryObject {
         let structure = self.structure;
         let geometry = self.geometry;
+        let command_pool = recording.command_pool();
         let device = command_pool.queue().device();
-        let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
-            let build_info = VkAccelerationStructureBuildGeometryInfoKHR {
-                sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-                pNext: ptr::null(),
-                r#type: VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-                flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkFlags,
-                update: VK_FALSE,
-                srcAccelerationStructure: ptr::null_mut(),
-                dstAccelerationStructure: structure.handle(),
-                geometryArrayOfPointers: VK_FALSE,
-                geometryCount: geometry.info_vec().len() as u32,
-                ppGeometries: &geometry.info_vec().as_ptr(),
-                scratchData: scratch_buffer_memory.buffer_device_address(),
-            };
-            // converts to an array of pointers to arrays of VkAccelerationStructureBuildOffsetInfoKHR
-            let offset_ptr_vec = geometry.offset_vec().iter()
-                .map(|v| v as *const VkAccelerationStructureBuildOffsetInfoKHR)
-                .collect::<Vec<_>>();
-            dispatch_vkCmdBuildAccelerationStructureKHR(device.handle(), 
-                command_buffer, 1, &build_info, offset_ptr_vec.as_ptr());
-            // memory barrier allowing reuse of scratch across builds
-            let memory_barrier = VkMemoryBarrier {
-                sType: VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-                pNext: ptr::null(),
-                srcAccessMask: VkAccessFlagBits::VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR as VkAccessFlags,
-                dstAccessMask: VkAccessFlagBits::VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR as VkAccessFlags
-            };
-            vkCmdPipelineBarrier(command_buffer, 
-                VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR as VkPipelineStageFlags,
-                VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR as VkPipelineStageFlags, 
-                0, 
-                1, &memory_barrier,
-                0, ptr::null(),
-                0, ptr::null(),
-            );
-        });
-        BottomLevelAccelerationStructureGeometryBuild::new(
-            geometry,
-            structure,
-            command_buffer,
-            scratch_buffer_memory,
-        )
-    }
-}
-
-pub struct BottomLevelAccelerationStructureGeometryBuild {
-    geometry: Arc<BottomLevelAccelerationStructureGeometry>,
-    structure: Arc<AccelerationStructure>,
-    command_buffer: Arc<CommandBuffer>,
-    scratch_buffer_memory: Arc<DedicatedBufferMemory>,
-}
-
-impl BottomLevelAccelerationStructureGeometryBuild {
-    fn new(
-        geometry: Arc<BottomLevelAccelerationStructureGeometry>,
-        structure: Arc<AccelerationStructure>,
-        command_buffer: Arc<CommandBuffer>,
-        scratch_buffer_memory: &Arc<DedicatedBufferMemory>,
-    ) -> Self {
-        let object = Self {
-            geometry,
-            structure,
-            command_buffer,
-            scratch_buffer_memory: Arc::clone(scratch_buffer_memory),
+        let build_info = VkAccelerationStructureBuildGeometryInfoKHR {
+            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+            pNext: ptr::null(),
+            r#type: VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+            flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkFlags,
+            update: VK_FALSE,
+            srcAccelerationStructure: ptr::null_mut(),
+            dstAccelerationStructure: structure.handle(),
+            geometryArrayOfPointers: VK_FALSE,
+            geometryCount: geometry.info_vec().len() as u32,
+            ppGeometries: &geometry.info_vec().as_ptr(),
+            scratchData: scratch_buffer_memory.buffer_device_address(),
         };
-        object
-    }
-
-    fn command_buffer(&self) -> &Arc<CommandBuffer> {
-        &self.command_buffer
-    }
-
-    fn finalize(self) -> Arc<BottomLevelAccelerationStructureGeometryObject> {
-        BottomLevelAccelerationStructureGeometryObject::new(self.geometry, self.structure)
+        // converts to an array of pointers to arrays of VkAccelerationStructureBuildOffsetInfoKHR
+        let offset_ptr_vec = geometry.offset_vec().iter()
+            .map(|v| v as *const VkAccelerationStructureBuildOffsetInfoKHR)
+            .collect::<Vec<_>>();
+        dispatch_vkCmdBuildAccelerationStructureKHR(device.handle(), 
+            recording.command_buffer(), 1, &build_info, offset_ptr_vec.as_ptr());
+        // memory barrier allowing reuse of scratch across builds
+        let memory_barrier = VkMemoryBarrier {
+            sType: VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+            pNext: ptr::null(),
+            srcAccessMask: VkAccessFlagBits::VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR as VkAccessFlags,
+            dstAccessMask: VkAccessFlagBits::VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR as VkAccessFlags
+        };
+        vkCmdPipelineBarrier(recording.command_buffer(), 
+            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR as VkPipelineStageFlags,
+            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR as VkPipelineStageFlags, 
+            0, 
+            1, &memory_barrier,
+            0, ptr::null(),
+            0, ptr::null(),
+        );
+        BottomLevelAccelerationStructureGeometryObject {
+            geometry,
+            structure,
+        }
     }
 }
 
-pub struct BottomLevelAccelerationStructureGeometryObject {
+struct BottomLevelAccelerationStructureGeometryObject {
     geometry: Arc<BottomLevelAccelerationStructureGeometry>,
     structure: Arc<AccelerationStructure>,
 }
 
 impl BottomLevelAccelerationStructureGeometryObject {
-    fn new(
-        geometry: Arc<BottomLevelAccelerationStructureGeometry>,
-        structure: Arc<AccelerationStructure>,
-    ) -> Arc<Self> {
-        let object = Self {
-            geometry,
-            structure,
-        };
-        Arc::new(object)
-    }
-
     #[inline]
-    pub fn structure_device_address(&self) -> VkDeviceAddress {
-        self.structure.device_address()
+    fn structure(&self) -> &Arc<AccelerationStructure> {
+        &self.structure
     }
 }
 
@@ -459,59 +462,6 @@ impl Drop for AccelerationStructure {
             vkDestroyAccelerationStructureKHR(self.device.handle(), self.handle, ptr::null());
             vkFreeMemory(self.device.handle(), self.memory, ptr::null());
         }
-    }
-}
-
-pub struct AccelerationVertexStagingBuffer {
-    vertex_buffer: Arc<DedicatedStagingBuffer>,
-    index_buffer: Arc<DedicatedStagingBuffer>,
-    index_count: usize,
-}
-
-impl AccelerationVertexStagingBuffer {
-    pub fn new<Vertex>(command_pool: &Arc<CommandPool>, vertices: &[Vertex], indices: &[u32]) -> Arc<Self> {
-        let vertex_buffer_size = std::mem::size_of::<Vertex>() * vertices.len();
-        let vertex_buffer = DedicatedStagingBuffer::new(
-            command_pool, 
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT as VkBufferUsageFlags 
-                | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
-                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-            vertex_buffer_size as VkDeviceSize,
-        ).unwrap();
-        let index_buffer_size = std::mem::size_of::<u32>() * indices.len();
-        let index_buffer = DedicatedStagingBuffer::new(
-            command_pool, 
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT as VkBufferUsageFlags 
-                | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
-                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-            index_buffer_size as VkDeviceSize,
-        ).unwrap();
-        // transfer
-        vertex_buffer.write(vertices.as_ptr() as *const c_void, vertex_buffer_size);
-        index_buffer.write(indices.as_ptr() as *const c_void, index_buffer_size);
-        let buffer = AccelerationVertexStagingBuffer {
-            vertex_buffer,
-            index_buffer,
-            index_count: indices.len(),
-        };
-        Arc::new(buffer)
-    }
-
-    #[inline]
-    pub fn vertex_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
-        &self.vertex_buffer
-    }
-
-    #[inline]
-    pub fn index_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
-        &self.index_buffer
-    }
-
-    #[inline]
-    pub fn index_count(&self) -> usize {
-        self.index_count
     }
 }
 

@@ -58,7 +58,7 @@ void main() {
   vec3 n2 = normalAt(triangleIndex.z);
   vec3 objectNormal = n0 * barycentrics.x + n1 * barycentrics.y + n2 * barycentrics.z;
   vec3 objectPosition = v0 * barycentrics.x + v1 * barycentrics.y + v2 * barycentrics.z;
-  vec3 worldNormal = vec3(objectNormal * gl_WorldToObjectEXT);
+  vec3 worldNormal = normalize(vec3(objectNormal * gl_WorldToObjectEXT));
   vec3 worldPosition = vec3(gl_ObjectToWorldEXT * vec4(objectPosition, 1.0));
-  hitValue = vec3(lightDiffuse(vec3(10.0f, 15.0f, 8.0f), worldPosition, worldNormal));
+  hitValue = vec3(lightDiffuse(vec3(0.0f, 5.0f, 0.0f), worldPosition, worldNormal));
 }

@@ -906,6 +906,14 @@ pub struct VkCommandBufferBeginInfo {
     pub pInheritanceInfo: *const VkCommandBufferInheritanceInfo,
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkCommandBufferUsageFlagBits.html
+#[repr(C)]
+pub enum VkCommandBufferUsageFlagBits {
+    VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT = 0x00000001,
+    VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT = 0x00000002,
+    VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT = 0x00000004,
+}
+
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkBufferCopy.html
 #[repr(C)]
 #[derive(Copy, Clone)]
