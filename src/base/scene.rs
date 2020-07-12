@@ -98,8 +98,18 @@ impl Scene {
         let staging_buffers = SceneStagingBuffers::new(command_pool, primitives);
         log_debug!("creating staging complete");
         log_debug!("building blas");
-        let scene_mesh_primitives: Vec<_> = table.mesh_primitives().iter()
-            .map(|v| SceneMeshPrimitive::new(v, &staging_buffers, command_pool))
+        let scene_mesh_primitive_geometries: Vec<_> = table.mesh_primitives().iter()
+            .map(|v| SceneMeshPrimitiveGeometry::new(v, &staging_buffers, command_pool))
+            .collect();
+        let geometries: Vec<_> = scene_mesh_primitive_geometries.iter()
+            .map(|v| v.structure_geometry())
+            .map(Arc::clone)
+            .collect();
+        let builder = BottomLevelAccelerationStructuresBuilder::new(command_pool, &geometries);
+        let structures = builder.build().unwrap();
+        let scene_mesh_primitives: Vec<_> = structures.into_iter()
+            .zip(scene_mesh_primitive_geometries.into_iter())
+            .map(|(structure, geometry)| SceneMeshPrimitive::new(geometry, structure))
             .collect();
         log_debug!("building blas complete");
         log_debug!("building tlas");
@@ -414,21 +424,46 @@ impl<'a, 'b: 'a> MeshNode<'a, 'b> {
 }
 
 pub struct SceneMeshPrimitive {
-    index: usize,
-    offset: MeshPrimitiveOffset,
-    num_vertices: usize,
-    num_indices: usize,
-    bottom_level_acceleration_structure: Arc<BottomLevelAccelerationStructure>,
-    staging_buffers: Arc<SceneStagingBuffers>,
+    geometry: Arc<SceneMeshPrimitiveGeometry>,
+    structure: Arc<BottomLevelAccelerationStructure>,
 }
 
 impl SceneMeshPrimitive {
+    fn new(geometry: Arc<SceneMeshPrimitiveGeometry>, structure: Arc<BottomLevelAccelerationStructure>) -> Arc<Self> {
+        let primitive = Self {
+            geometry,
+            structure,
+        };
+        Arc::new(primitive)
+    }
+
+    pub fn staging_buffers(&self) -> &Arc<SceneStagingBuffers> {
+        &self.geometry.staging_buffers()
+    }
+
+    pub fn index(&self) -> usize {
+        self.geometry.index()
+    }
+
+    pub fn bottom_level_acceleration_structure(&self) -> &Arc<BottomLevelAccelerationStructure> {
+        &self.structure
+    }
+}
+
+pub struct SceneMeshPrimitiveGeometry {
+    index: usize,
+    offset: MeshPrimitiveOffset,
+    structure_geometry: Arc<BottomLevelAccelerationStructureGeometry>,
+    staging_buffers: Arc<SceneStagingBuffers>,
+}
+
+impl SceneMeshPrimitiveGeometry {
     fn new(mesh_primitive: &MeshPrimitive, staging_buffers: &Arc<SceneStagingBuffers>, command_pool: &Arc<CommandPool>) -> Arc<Self> {
         let vertex_stride = std::mem::size_of::<[f32; 3]>();
         let num_vertices = mesh_primitive.primitive.positions.count();
         let num_indices = mesh_primitive.primitive.indices.count();
         assert_eq!(mesh_primitive.primitive.positions.count(), mesh_primitive.primitive.normals.count());
-        let geometry = BottomLevelAccelerationStructureGeometry::new(
+        let structure_geometry = BottomLevelAccelerationStructureGeometry::new(
                 num_vertices as u32, 
                 vertex_stride as VkDeviceSize,
                 mesh_primitive.offset.vertex_offset as u32,
@@ -437,29 +472,25 @@ impl SceneMeshPrimitive {
                 mesh_primitive.offset.index_offset as u32,
                 staging_buffers.index_buffer().device_buffer_memory())
             .unwrap();
-        let bottom_level_acceleration_structure = BottomLevelAccelerationStructure::new(command_pool, vec![geometry])
-            .unwrap();
         let v = Self {
             index: mesh_primitive.index(),
             offset: mesh_primitive.offset.clone(),
             staging_buffers: Arc::clone(staging_buffers),
-            num_vertices,
-            num_indices,
-            bottom_level_acceleration_structure,
+            structure_geometry,
         };
         Arc::new(v)
     }
-
-    pub fn staging_buffers(&self) -> &Arc<SceneStagingBuffers> {
+    
+    fn staging_buffers(&self) -> &Arc<SceneStagingBuffers> {
         &self.staging_buffers
     }
 
-    pub fn index(&self) -> usize {
+    fn index(&self) -> usize {
         self.index
     }
 
-    pub fn bottom_level_acceleration_structure(&self) -> &Arc<BottomLevelAccelerationStructure> {
-        &self.bottom_level_acceleration_structure
+    fn structure_geometry(&self) -> &Arc<BottomLevelAccelerationStructureGeometry> {
+        &self.structure_geometry
     }
 }
 

@@ -175,6 +175,15 @@ impl VkCommandBufferBeginInfo {
             pInheritanceInfo: ptr::null(),
         }
     }
+
+    pub fn new_onetime_submit() -> Self {
+        VkCommandBufferBeginInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            pNext: ptr::null(),
+            flags: VkCommandBufferUsageFlagBits::VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT as VkFlags,
+            pInheritanceInfo: ptr::null(),
+        }
+    }
 }
 
 impl VkBufferCopy {

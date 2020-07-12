@@ -355,3 +355,67 @@ impl Drop for ShaderModule {
         }
     }
 }
+
+pub struct CommandBufferRecording<'a> {
+    command_pool: &'a Arc<CommandPool>,
+    command_buffer: Option<VkCommandBuffer>,
+}
+
+impl<'a> CommandBufferRecording<'a> {
+    pub fn new_onetime_submit(command_pool: &'a Arc<CommandPool>) -> Result<Self> {
+        unsafe {
+            let device = command_pool.queue().device();
+            let mut command_buffer = MaybeUninit::<VkCommandBuffer>::zeroed();
+            {
+                let alloc_info = VkCommandBufferAllocateInfo::new(command_pool.handle(), VkCommandBufferLevel::VK_COMMAND_BUFFER_LEVEL_PRIMARY, 1);
+                vkAllocateCommandBuffers(device.handle(), &alloc_info, command_buffer.as_mut_ptr())
+                    .into_result()
+                    .unwrap();
+            }
+            let command_buffer = command_buffer.assume_init();
+            let begin_info = VkCommandBufferBeginInfo::new_onetime_submit();
+            vkBeginCommandBuffer(command_buffer, &begin_info)
+                .into_result()
+                .unwrap();
+            let recording = Self {
+                command_pool,
+                command_buffer: Some(command_buffer),
+            };
+            Ok(recording)
+        }
+    }
+
+    #[inline]
+    pub fn command_buffer(&self) -> VkCommandBuffer {
+        self.command_buffer.unwrap()
+    }
+
+    #[inline]
+    pub fn command_pool(&self) -> &'a Arc<CommandPool> {
+        self.command_pool
+    }
+
+    pub fn complete(mut self) -> Arc<CommandBuffer> {
+        unsafe {
+            let command_buffer = self.command_buffer.take().unwrap();
+            let command_pool = &self.command_pool;
+            let device = command_pool.queue().device();
+            let mut fence = MaybeUninit::<VkFence>::zeroed();
+            {
+                let create_info = VkFenceCreateInfo::new(VkFenceCreateFlagBits::VK_FENCE_CREATE_SIGNALED_BIT as VkFlags);
+                vkCreateFence(device.handle(), &create_info, ptr::null(), fence.as_mut_ptr())
+                    .into_result()
+                    .unwrap();
+            }
+            let fence = fence.assume_init();
+            vkEndCommandBuffer(command_buffer);
+            CommandBuffer::new(command_pool, command_buffer, fence)
+        }
+    }
+}
+
+impl<'a> Drop for CommandBufferRecording<'a> {
+    fn drop(&mut self) {
+        assert!(self.command_buffer.is_none(), "incomplete command buffer recording");
+    }
+}

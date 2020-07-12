@@ -19,7 +19,7 @@ impl OrbitalCamera {
         let inv_proj = glm::inverse(&perspective);
         let rotation_x: f32 = -0.24;
         let rotation_y: f32 = 0.36;
-        let distance: f32 = 3.0;
+        let distance: f32 = 5.0;
         Self {
             view: orbital(distance, rotation_x, rotation_y),
             inv_proj: inv_proj,
@@ -63,6 +63,6 @@ fn orbital(radius: f32, rotation_x: f32, rotation_y: f32) -> glm::Mat4 {
     // translation
     let dir = glm::vec3(0.0, 0.0, -radius);
     let translation = glm::translate(&glm::identity(), &dir);
-    let center = glm::translate(&glm::identity(), &glm::vec3(0.0, 0.0, 0.0));
+    let center = glm::translate(&glm::identity(), &glm::vec3(0.0, -2.0, 0.0));
     translation * rotation * center
 }
