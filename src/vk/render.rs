@@ -71,6 +71,10 @@ impl GraphicsRender {
 
     pub fn draw(&self) -> Result<()> {
         let swapchain = self.swapchain_framebuffers.swapchain();
+        let image = swapchain.current_image();
+        if let Some(image) = image {
+            swapchain.queue_present(image, self.render_semaphore.handle())?;
+        }
         let image = swapchain.acquire_next_image(self.present_semaphore.handle())?;
         let frame = self.frames.get(image.index())
             .ok_or_else(|| ErrorCode::RenderFrameNotFound)?;
@@ -81,7 +85,6 @@ impl GraphicsRender {
             self.present_semaphore.handle(),
             self.render_semaphore.handle(),
         )?;
-        swapchain.queue_present(image, self.render_semaphore.handle())?;
         Ok(())
     }
 }
