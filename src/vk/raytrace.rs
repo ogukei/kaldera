@@ -5,7 +5,7 @@ use super::error::ErrorCode;
 use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource, CommandBufferRecording};
 use super::memory::{StorageBuffer, UniformBuffer, DedicatedBufferMemory, DedicatedStagingBuffer};
-use super::image::{ColorImage};
+use super::image::{ColorImage, Texture};
 
 use std::ptr;
 use std::mem;
@@ -648,13 +648,14 @@ pub struct RayTracingGraphicsPipeline {
 impl RayTracingGraphicsPipeline {
     pub fn new(
         device: &Arc<Device>,
+        textures_count: usize,
     ) -> Result<Arc<Self>> {
         unsafe {
-            Self::init(device)
+            Self::init(device, textures_count)
         }
     }
 
-    unsafe fn init(device: &Arc<Device>) -> Result<Arc<Self>> {
+    unsafe fn init(device: &Arc<Device>, textures_count: usize) -> Result<Arc<Self>> {
         // Descriptor Set Layout
         let mut descriptor_set_layout = MaybeUninit::<VkDescriptorSetLayout>::zeroed();
         {
@@ -693,6 +694,17 @@ impl RayTracingGraphicsPipeline {
                     VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
                     VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
                     6,
+                ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    7,
+                ),
+                VkDescriptorSetLayoutBinding::new_array(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    8,
+                    textures_count,
                 ),
             ];
             let create_info = VkDescriptorSetLayoutCreateInfo::new(bindings.len() as u32, bindings.as_ptr());
@@ -857,6 +869,8 @@ pub struct RayTracingDescriptorSets {
     index_storage_buffer: Arc<DedicatedStagingBuffer>,
     normal_storage_buffer: Arc<DedicatedStagingBuffer>,
     description_storage_buffer: Arc<DedicatedStagingBuffer>,
+    texcoord_storage_buffer: Arc<DedicatedStagingBuffer>,
+    textures: Vec<Arc<Texture>>,
     descriptor_pool: VkDescriptorPool,
     descriptor_set: VkDescriptorSet,
 }
@@ -871,6 +885,8 @@ impl RayTracingDescriptorSets {
         index_storage_buffer: &Arc<DedicatedStagingBuffer>,
         normal_storage_buffer: &Arc<DedicatedStagingBuffer>,
         description_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        texcoord_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        textures: &[Arc<Texture>],
     ) -> Result<Arc<Self>> {
         unsafe {
             Self::init(pipeline, 
@@ -880,7 +896,10 @@ impl RayTracingDescriptorSets {
                 vertex_storage_buffer, 
                 index_storage_buffer, 
                 normal_storage_buffer, 
-                description_storage_buffer)
+                description_storage_buffer,
+                texcoord_storage_buffer,
+                textures,
+            )
         }
     }
 
@@ -893,6 +912,8 @@ impl RayTracingDescriptorSets {
         index_storage_buffer: &Arc<DedicatedStagingBuffer>,
         normal_storage_buffer: &Arc<DedicatedStagingBuffer>,
         description_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        texcoord_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        textures: &[Arc<Texture>],
     ) -> Result<Arc<Self>> {
         let device = pipeline.device();
         // Descriptor Pool
@@ -906,6 +927,8 @@ impl RayTracingDescriptorSets {
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, textures.len() as u32),
             ];
             let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr());
             vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), descriptor_pool.as_mut_ptr())
@@ -996,6 +1019,24 @@ impl RayTracingDescriptorSets {
             VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             6,
             &write_description_buffer_info);
+        let write_texcoord_buffer_info = VkDescriptorBufferInfo {
+            buffer: texcoord_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: texcoord_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_texcoord_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            7,
+            &write_texcoord_buffer_info);
+        let textures: Vec<_> = textures.iter().map(Arc::clone).collect();
+        let texture_descriptors: Vec<VkDescriptorImageInfo> = textures.iter()
+            .map(|v| v.descriptor())
+            .collect();
+        let write_texture_images = VkWriteDescriptorSet::from_image_array(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            8,
+            texture_descriptors.len(),
+            texture_descriptors.as_ptr());
         let write_descriptor_sets = vec![
             write_acceleration_structure,
             write_image,
@@ -1004,6 +1045,8 @@ impl RayTracingDescriptorSets {
             write_index_buffer,
             write_normal_buffer,
             write_description_buffer,
+            write_texcoord_buffer,
+            write_texture_images,
         ];
         vkUpdateDescriptorSets(device.handle(), 
             write_descriptor_sets.len() as u32, 
@@ -1020,6 +1063,8 @@ impl RayTracingDescriptorSets {
             index_storage_buffer: Arc::clone(index_storage_buffer),
             normal_storage_buffer: Arc::clone(normal_storage_buffer),
             description_storage_buffer: Arc::clone(description_storage_buffer),
+            texcoord_storage_buffer: Arc::clone(texcoord_storage_buffer),
+            textures,
             descriptor_pool,
             descriptor_set,
         };

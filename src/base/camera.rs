@@ -16,8 +16,8 @@ pub struct OrbitalCamera {
 }
 
 impl OrbitalCamera {
-    pub fn new() -> Self {
-        let perspective = glm::perspective_fov(glm::radians(&glm::vec1(60.0)).x, 1.0, 1.0, 0.1, 100.0);
+    pub fn new(width: f32, height: f32) -> Self {
+        let perspective = glm::perspective_fov(glm::radians(&glm::vec1(60.0)).x, width, height, 0.1, 100.0);
         let inv_proj = glm::inverse(&perspective);
         let rotation_x: f32 = -0.24;
         let rotation_y: f32 = 0.36;

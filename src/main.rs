@@ -7,6 +7,9 @@ use kaldera::vk::*;
 use kaldera::base::*;
 use std::sync::{Arc, Mutex};
 
+const WIDTH: usize = 1280;
+const HEIGHT: usize = 720;
+
 struct Context {
     camera: Arc<Mutex<OrbitalCamera>>,
     graphics_render: Arc<GraphicsRender>,
@@ -22,7 +25,7 @@ fn main() {
         .unwrap();
     // surface
     let connection = XcbConnection::new();
-    let window = XcbWindow::new(&connection, 800, 800);
+    let window = XcbWindow::new(&connection, WIDTH as u16, HEIGHT as u16);
     let surface = XcbSurface::new(&instance, &window).unwrap();
     // choose render strategy
     let capabilities = PhysicalDeviceCapabilities::new(&instance).unwrap();
@@ -47,7 +50,7 @@ fn main() {
         if let None = context.graphics_render.draw().ok() {
             break
         }
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_millis(15));
     }
     context.device_queues.graphics_queue()
         .wait_idle()
@@ -63,9 +66,7 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
     let scene_asset = SceneAsset::new().unwrap();
     let scene = SceneBuilder::new(&scene_asset)
         .build(&command_pool);
-    let raytracing_pipeline = RayTracingGraphicsPipeline::new(device_queues.device())
-        .unwrap();
-    let camera = OrbitalCamera::new();
+    let camera = OrbitalCamera::new(WIDTH as f32, HEIGHT as f32);
     let uniform_buffer_model = RayTracingUniformBufferModel {
         view_inverse: camera.view_inverse(),
         proj_inverse: camera.projection_inverse(),
@@ -73,10 +74,12 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
     let uniform_buffer = UniformBuffer::new(&command_pool, &vec![uniform_buffer_model])
         .unwrap();
     let extent = VkExtent2D {
-        width: 800,
-        height: 800,
+        width: WIDTH as u32,
+        height: HEIGHT as u32,
     };
     let framebuffer = OffscreenFramebuffer::new(device_queues.device(), extent)
+        .unwrap();
+    let raytracing_pipeline = RayTracingGraphicsPipeline::new(device_queues.device(), scene.textures().len())
         .unwrap();
     let descriptor_sets = RayTracingDescriptorSets::new(
         &raytracing_pipeline, 
@@ -87,6 +90,8 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
         scene.index_staging_buffer(),
         scene.normal_staging_buffer(),
         scene.description_staging_buffer(),
+        scene.texcoord_staging_buffer(),
+        scene.textures(),
     )
         .unwrap();
     let raytracing_render = RayTracingGraphicsRender::new(&command_pool, &raytracing_pipeline, &descriptor_sets)
@@ -117,7 +122,7 @@ fn rasterization_render(surface: &Arc<Surface>) -> Context {
         .build()
         .unwrap();
     let command_pool = CommandPool::new(device_queues.graphics_queue()).unwrap();
-    let camera = OrbitalCamera::new();
+    let camera = OrbitalCamera::new(WIDTH as f32, HEIGHT as f32);
     let uniform_buffer_model = RayTracingUniformBufferModel {
         view_inverse: camera.view_inverse(),
         proj_inverse: camera.projection_inverse(),
@@ -129,8 +134,8 @@ fn rasterization_render(surface: &Arc<Surface>) -> Context {
     let uniform_buffer = UniformBuffer::new(&command_pool, &vec![uniform_buffer_model])
         .unwrap();
     let extent = VkExtent2D {
-        width: 800,
-        height: 800,
+        width: WIDTH as u32,
+        height: HEIGHT as u32,
     };
     let swapchain = Swapchain::new(&device_queues, &surface, extent).unwrap();
     let swapchain_framebuffers = SwapchainFramebuffers::new(&swapchain).unwrap();

@@ -150,6 +150,7 @@ pub struct Scene {
     staging_buffers: Arc<SceneStagingBuffers>,
     top_level_acceleration_structure: Arc<TopLevelAccelerationStructure>,
     materials: Vec<Arc<SceneMeshMaterial>>,
+    textures: Vec<Arc<Texture>>,
 }
 
 impl Scene {
@@ -161,6 +162,10 @@ impl Scene {
         log_debug!("creating material images");
         let materials: Vec<_> = materials.iter()
             .map(|v| SceneMeshMaterial::new(v, command_pool))
+            .collect();
+        let textures: Vec<_> = materials.iter()
+            .map(|v| v.texture())
+            .map(Arc::clone)
             .collect();
         log_debug!("creating material images complete");
         log_debug!("building blas");
@@ -208,6 +213,7 @@ impl Scene {
             staging_buffers,
             top_level_acceleration_structure,
             materials,
+            textures,
         }
     }
 
@@ -229,6 +235,14 @@ impl Scene {
 
     pub fn description_staging_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
         &self.staging_buffers.description_buffer()
+    }
+
+    pub fn texcoord_staging_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.staging_buffers.texcoord_buffer()
+    }
+
+    pub fn textures(&self) -> &Vec<Arc<Texture>> {
+        &self.textures
     }
 }
 
@@ -265,13 +279,17 @@ impl SceneMeshMaterial {
 pub struct SceneMeshPrimitiveDescription {
     vertex_offset: u32,
     index_offset: u32,
+    texture_index: u32,
+    reserved: u32,
 }
 
-impl From<MeshPrimitiveOffset> for SceneMeshPrimitiveDescription {
-    fn from(offset: MeshPrimitiveOffset) -> Self {
+impl SceneMeshPrimitiveDescription {
+    fn new(offset: MeshPrimitiveOffset, material_index: u32) -> Self {
         Self {
             vertex_offset: offset.vertex_offset as u32,
             index_offset: offset.index_offset as u32,
+            texture_index: material_index,
+            reserved: 0u32,
         }
     }
 }
@@ -319,7 +337,7 @@ impl SceneStagingBuffers {
             normals_buffer_size as VkDeviceSize,
         ).unwrap();
         let descriptions: Vec<SceneMeshPrimitiveDescription> = primitives.iter()
-            .map(|v| v.offset.clone().into())
+            .map(|v| SceneMeshPrimitiveDescription::new(v.offset.clone(), v.material_index() as u32))
             .collect();
         let description_buffer_size = std::mem::size_of::<SceneMeshPrimitiveDescription>() * descriptions.len();
         let description_buffer = DedicatedStagingBuffer::new(
@@ -413,6 +431,11 @@ impl SceneStagingBuffers {
     #[inline]
     pub fn description_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
         &self.description_buffer
+    }
+
+    #[inline]
+    pub fn texcoord_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.texcoord_buffer
     }
 }
 
@@ -620,6 +643,7 @@ pub struct MeshPrimitiveOffset {
 struct MeshPrimitive<'a> {
     mesh_primitive_index: usize,
     mesh_index: usize,
+    material_index: usize,
     offset: MeshPrimitiveOffset,
     primitive: Primitive<'a>,
 }
@@ -629,6 +653,7 @@ impl<'a> MeshPrimitive<'a> {
         Self {
             mesh_index,
             mesh_primitive_index,
+            material_index: primitive.material_index.unwrap_or(0),
             offset,
             primitive,
         }
@@ -636,6 +661,10 @@ impl<'a> MeshPrimitive<'a> {
 
     fn mesh_index(&self) -> usize {
         self.mesh_index
+    }
+
+    fn material_index(&self) -> usize {
+        self.material_index
     }
 
     fn index(&self) -> usize {

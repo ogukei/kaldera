@@ -528,9 +528,9 @@ impl TextureImage {
                 magFilter: VkFilter::VK_FILTER_LINEAR,
                 minFilter: VkFilter::VK_FILTER_LINEAR,
                 mipmapMode: VkSamplerMipmapMode::VK_SAMPLER_MIPMAP_MODE_LINEAR,
-                addressModeU: VkSamplerAddressMode::VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                addressModeV: VkSamplerAddressMode::VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                addressModeW: VkSamplerAddressMode::VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+                addressModeU: VkSamplerAddressMode::VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                addressModeV: VkSamplerAddressMode::VK_SAMPLER_ADDRESS_MODE_REPEAT,
+                addressModeW: VkSamplerAddressMode::VK_SAMPLER_ADDRESS_MODE_REPEAT,
                 mipLodBias: 0.0,
                 anisotropyEnable: VK_FALSE,
                 maxAnisotropy: 1.0,
@@ -723,6 +723,14 @@ impl Texture {
                 buffer_memory,
             };
             Ok(Arc::new(image_buffer_memory))
+        }
+    }
+
+    pub(crate) fn descriptor(&self) -> VkDescriptorImageInfo {
+        VkDescriptorImageInfo {
+            imageLayout: VkImageLayout::VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            imageView: self.texture_image.view(),
+            sampler: self.texture_image.sampler(),
         }
     }
 }
