@@ -12,6 +12,7 @@ struct Context {
     graphics_render: Arc<GraphicsRender>,
     uniform_buffer: Arc<UniformBuffer>,
     device_queues: Arc<DeviceQueues>,
+    scene: Option<Scene>,
 }
 
 fn main() {
@@ -107,6 +108,7 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
         graphics_render,
         uniform_buffer,
         device_queues,
+        scene: Some(scene),
     }
 }
 
@@ -153,5 +155,6 @@ fn rasterization_render(surface: &Arc<Surface>) -> Context {
         graphics_render,
         uniform_buffer,
         device_queues,
+        scene: None,
     }
 }

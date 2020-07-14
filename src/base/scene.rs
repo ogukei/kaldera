@@ -27,7 +27,7 @@ pub struct SceneAsset {
 impl SceneAsset {
     pub fn new() -> Result<Self> {
         log_debug!("loading scene asset");
-        let (document, buffers, images) = gltf::import("data/models/box.glb").unwrap();
+        let (document, buffers, images) = gltf::import("/home/user/Downloads/Sponza/glTF/Sponza.gltf").unwrap();
         log_debug!("loading scene asset complete");
         let asset = Self {
             document,
@@ -81,7 +81,67 @@ impl<'a> SceneBuilder<'a> {
             .flatten()
             .collect();
         log_debug!("iterating nodes complete");
-        Scene::new(&table, &nodes, command_pool)
+        log_debug!("iterating materials");
+        let materials: Vec<_> = asset.document().materials()
+            .into_iter()
+            .map(|v| Material::new(v, asset.images()))
+            .collect();
+        log_debug!("iterating materials complete");
+        Scene::new(&table, &nodes, &materials, command_pool)
+    }
+}
+
+enum MaterialImagePixels<'a> {
+    Ref(&'a Vec<u8>),
+    Vec(Vec<u8>),
+}
+
+impl<'a> MaterialImagePixels<'a> {
+    fn new(image: &'a gltf::image::Data) -> Option<Self> {
+        use gltf::image::Format;
+        match image.format {
+            Format::R8G8B8 => {
+                let bytes = image.width as usize * image.height as usize * 4usize;
+                let mut pixels: Vec<u8> = Vec::with_capacity(bytes);
+                for rgb in image.pixels.chunks(3) {
+                    pixels.extend_from_slice(rgb);
+                    pixels.push(0xffu8);
+                }
+                Some(Self::Vec(pixels))
+            },
+            Format::R8G8B8A8 => {
+                Some(Self::Ref(&image.pixels))
+            },
+            _ => None,
+        }
+    }
+
+    fn pixels(&self) -> &Vec<u8> {
+        match &self {
+            &Self::Ref(v) => v,
+            &Self::Vec(v) => v,
+        }
+    }
+}
+
+struct Material<'a> {
+    image: &'a gltf::image::Data,
+    material: gltf::material::Material<'a>,
+    pixels: MaterialImagePixels<'a>,
+}
+
+impl<'a> Material<'a> {
+    fn new(material: gltf::material::Material<'a>, images: &'a Vec<gltf::image::Data>) -> Self {
+        let model = material.pbr_metallic_roughness();
+        let color = model.base_color_texture().unwrap();
+        let image_index = color.texture().source().index();
+        let image = images.get(image_index).unwrap();
+        let pixels = MaterialImagePixels::new(image).unwrap();
+        Self {
+            image,
+            material,
+            pixels,
+        }
     }
 }
 
@@ -89,14 +149,20 @@ pub struct Scene {
     primitives: Vec<Arc<SceneMeshPrimitive>>,
     staging_buffers: Arc<SceneStagingBuffers>,
     top_level_acceleration_structure: Arc<TopLevelAccelerationStructure>,
+    materials: Vec<Arc<SceneMeshMaterial>>,
 }
 
 impl Scene {
-    fn new(table: &MeshTable, nodes: &[MeshNode], command_pool: &Arc<CommandPool>) -> Self {
+    fn new(table: &MeshTable, nodes: &[MeshNode], materials: &[Material], command_pool: &Arc<CommandPool>) -> Self {
         let primitives = table.mesh_primitives();
         log_debug!("creating staging buffers");
         let staging_buffers = SceneStagingBuffers::new(command_pool, primitives);
-        log_debug!("creating staging complete");
+        log_debug!("creating staging buffers complete");
+        log_debug!("creating material images");
+        let materials: Vec<_> = materials.iter()
+            .map(|v| SceneMeshMaterial::new(v, command_pool))
+            .collect();
+        log_debug!("creating material images complete");
         log_debug!("building blas");
         let scene_mesh_primitive_geometries: Vec<_> = table.mesh_primitives().iter()
             .map(|v| SceneMeshPrimitiveGeometry::new(v, &staging_buffers, command_pool))
@@ -141,6 +207,7 @@ impl Scene {
             primitives: scene_mesh_primitives,
             staging_buffers,
             top_level_acceleration_structure,
+            materials,
         }
     }
 
@@ -165,6 +232,34 @@ impl Scene {
     }
 }
 
+pub struct SceneMeshMaterial {
+    texture: Arc<Texture>,
+}
+
+impl SceneMeshMaterial {
+    fn new(material: &Material, command_pool: &Arc<CommandPool>) -> Arc<Self> {
+        let pixels = material.pixels.pixels();
+        let data = pixels.as_ptr() as *const c_void;
+        let data_size = pixels.len();
+        let extent = VkExtent3D {
+            width: material.image.width,
+            height: material.image.height,
+            depth: 1,
+        };
+        let device = command_pool.queue().device();
+        let texture_image = TextureImage::new(device, extent).unwrap();
+        let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
+        let mesh_material = Self {
+            texture,
+        };
+        Arc::new(mesh_material)
+    }
+
+    pub fn texture(&self) -> &Arc<Texture> {
+        &self.texture
+    }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct SceneMeshPrimitiveDescription {
@@ -186,6 +281,7 @@ pub struct SceneStagingBuffers {
     index_buffer: Arc<DedicatedStagingBuffer>,
     normals_buffer: Arc<DedicatedStagingBuffer>,
     description_buffer: Arc<DedicatedStagingBuffer>,
+    texcoord_buffer: Arc<DedicatedStagingBuffer>,
 }
 
 impl SceneStagingBuffers {
@@ -233,6 +329,14 @@ impl SceneStagingBuffers {
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
             description_buffer_size as VkDeviceSize,
         ).unwrap();
+        let texcoord_buffer_size = std::mem::size_of::<[f32; 2]>() * num_vertices;
+        let texcoord_buffer = DedicatedStagingBuffer::new(
+            command_pool, 
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
+                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            texcoord_buffer_size as VkDeviceSize,
+        ).unwrap();
         // TODO(ogukei): concurrent uploads
         unsafe {
             index_buffer.update(index_buffer_size as VkDeviceSize, |data| {
@@ -270,12 +374,23 @@ impl SceneStagingBuffers {
                 let src = descriptions.as_ptr() as *const u8;
                 std::ptr::copy_nonoverlapping(src, dst, description_buffer_size);
             });
+            texcoord_buffer.update(texcoord_buffer_size as VkDeviceSize, |data| {
+                let data = data as *mut u8;
+                for primitive in primitives.iter() {
+                    let byte_size = primitive.primitive.texcoords.count() * std::mem::size_of::<[f32; 2]>();
+                    let byte_offset = primitive.offset.vertex_offset * std::mem::size_of::<[f32; 2]>();
+                    let dst = data.offset(byte_offset as isize);
+                    let src = primitive.primitive.texcoords.data();
+                    std::ptr::copy_nonoverlapping(src, dst, byte_size);
+                }
+            });
         }
         let buffer = Self {
             vertex_buffer,
             index_buffer,
             normals_buffer,
             description_buffer,
+            texcoord_buffer,
         };
         Arc::new(buffer)
     }
@@ -455,6 +570,7 @@ pub struct SceneMeshPrimitiveGeometry {
     offset: MeshPrimitiveOffset,
     structure_geometry: Arc<BottomLevelAccelerationStructureGeometry>,
     staging_buffers: Arc<SceneStagingBuffers>,
+    material_index: Option<usize>,
 }
 
 impl SceneMeshPrimitiveGeometry {
@@ -477,6 +593,7 @@ impl SceneMeshPrimitiveGeometry {
             offset: mesh_primitive.offset.clone(),
             staging_buffers: Arc::clone(staging_buffers),
             structure_geometry,
+            material_index: mesh_primitive.primitive.material_index,
         };
         Arc::new(v)
     }
@@ -533,7 +650,6 @@ struct Mesh<'a> {
 
 impl<'a> Mesh<'a> {
     fn new(mesh: gltf::Mesh<'a>, buffers: &'a Vec<gltf::buffer::Data>) -> Self {
-        println!("Mesh {:?}", mesh.name());
         let index = mesh.index();
         let primitives = mesh.primitives()
             .map(|v| Primitive::new(v, buffers))
@@ -557,14 +673,20 @@ struct Primitive<'a> {
     indices: Indices<'a>,
     positions: Positions<'a>,
     normals: Normals<'a>,
+    texcoords: Texcoords<'a>,
+    material_index: Option<usize>,
 }
 
 impl<'a> Primitive<'a> {
     fn new(primitive: gltf::Primitive<'a>, buffers: &'a Vec<gltf::buffer::Data>) -> Self {
+        let material_index = primitive.material().index();
         Self {
             indices: Indices::new(&primitive, buffers),
             positions: Positions::new(&primitive, buffers),
             normals: Normals::new(&primitive, buffers),
+            // TODO(ogukei): support default TEXCOORD_0
+            texcoords: Texcoords::new(&primitive, buffers).unwrap(),
+            material_index,
         }
     }
 }
@@ -744,6 +866,66 @@ impl<'a> AccessorNormals<'a> {
         Self {
             slice,
             count: normals.count(),
+        }
+    }
+}
+
+enum Texcoords<'a> {
+    Accessor(AccessorTexcoords<'a>),
+    Vector(Vec<[f32; 2]>)
+}
+
+impl<'a> Texcoords<'a> {
+    fn new(primitive: &gltf::Primitive<'a>, buffers: &'a Vec<gltf::buffer::Data>) -> Option<Self> {
+        let texcoords = primitive.attributes()
+            .find_map(|(semantic, accessor)| 
+                match semantic { 
+                    Semantic::TexCoords(0) => Some(accessor),
+                    _ => None,
+                }
+            )?;
+        let view = texcoords.view().unwrap();
+        let use_reference = view.stride() == None
+            && texcoords.data_type() == DataType::F32 
+            && texcoords.dimensions() == Dimensions::Vec2;
+        if use_reference {
+            Some(Self::Accessor(AccessorTexcoords::new(&texcoords, buffers)))
+        } else {
+            let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+            let texcoords = reader.read_tex_coords(0).unwrap().into_f32();
+            Some(Self::Vector(texcoords.collect()))
+        }
+    }
+
+    fn count(&self) -> usize {
+        match &self {
+            &Self::Accessor(texcoords) => texcoords.count,
+            &Self::Vector(v) => v.len(),
+        }
+    }
+
+    fn data(&self) -> *const u8 {
+        match &self {
+            &Self::Accessor(texcoords) => texcoords.slice.as_ptr(),
+            &Self::Vector(v) => v.as_ptr() as *const _ as *const u8,
+        }
+    }
+}
+
+struct AccessorTexcoords<'a> {
+    slice: &'a [u8],
+    count: usize,
+}
+
+impl<'a> AccessorTexcoords<'a> {
+    fn new(texcoords: &gltf::Accessor<'a>, buffers: &'a Vec<gltf::buffer::Data>) -> Self {
+        let view = texcoords.view().unwrap();
+        let buffer = buffers.get(view.buffer().index()).unwrap();
+        let offset = view.offset() + texcoords.offset();
+        let slice = &buffer[offset..offset + view.length()];
+        Self {
+            slice,
+            count: texcoords.count(),
         }
     }
 }
