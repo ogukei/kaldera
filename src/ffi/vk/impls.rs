@@ -274,6 +274,20 @@ impl VkDescriptorSetLayoutBinding {
             pImmutableSamplers: ptr::null(),
         }
     }
+
+    pub fn new_array(
+        descriptor_type: VkDescriptorType, 
+        stage_flags: u32,
+        binding: u32,
+        descriptor_count: usize) -> Self {
+        VkDescriptorSetLayoutBinding {
+            binding: binding,
+            descriptorType: descriptor_type,
+            descriptorCount: descriptor_count as u32,
+            stageFlags: stage_flags,
+            pImmutableSamplers: ptr::null(),
+        }
+    }
 }
 
 impl VkDescriptorSetLayoutCreateInfo {
@@ -358,6 +372,27 @@ impl VkWriteDescriptorSet {
             dstBinding: dst_binding,
             dstArrayElement: 0,
             descriptorCount: 1,
+            descriptorType: descriptor_type,
+            pImageInfo: image_info,
+            pBufferInfo: ptr::null(),
+            pTexelBufferView: ptr::null(),
+        }
+    }
+
+    pub fn from_image_array(
+        dst_set: VkDescriptorSet, 
+        descriptor_type: VkDescriptorType,
+        dst_binding: u32,
+        descriptor_count: usize,
+        image_info: *const VkDescriptorImageInfo,
+    ) -> Self {
+        VkWriteDescriptorSet {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            pNext: ptr::null(),
+            dstSet: dst_set,
+            dstBinding: dst_binding,
+            dstArrayElement: 0,
+            descriptorCount: descriptor_count as u32,
             descriptorType: descriptor_type,
             pImageInfo: image_info,
             pBufferInfo: ptr::null(),

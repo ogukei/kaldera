@@ -18,6 +18,7 @@ pub enum ErrorCode {
     SuitableQueueFamilyNotFound,
     ShaderLoadIO(std::io::Error),
     ShaderLoadUnaligned,
+    ImageFormatInvalid,
 }
 
 #[derive(Debug)]

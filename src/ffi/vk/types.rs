@@ -140,6 +140,8 @@ pub const VK_QUEUE_FAMILY_IGNORED: u32 = u32::max_value();
 pub const VK_MAX_EXTENSION_NAME_SIZE: size_t = 256;
 pub const VK_MAX_DESCRIPTION_SIZE: size_t = 256;
 pub const VK_SUBPASS_EXTERNAL: u32 = !0u32;
+pub const VK_REMAINING_MIP_LEVELS: u32 = !0u32;
+pub const VK_REMAINING_ARRAY_LAYERS: u32 = !0u32;
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkResult.html
 #[repr(C)]
@@ -1574,6 +1576,7 @@ pub struct VkImageViewCreateInfo {
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageSubresourceRange.html
 #[repr(C)]
+#[derive(Clone)]
 pub struct VkImageSubresourceRange {
     pub aspectMask: VkImageAspectFlags,
     pub baseMipLevel: u32,
@@ -2381,6 +2384,34 @@ pub struct VkImageMemoryBarrier {
     pub subresourceRange: VkImageSubresourceRange,
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkImageSubresourceLayers.html
+#[repr(C)]
+pub struct VkImageSubresourceLayers {
+    pub aspectMask: VkImageAspectFlags,
+    pub mipLevel: u32,
+    pub baseArrayLayer: u32,
+    pub layerCount: u32,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkOffset3D.html
+#[repr(C)]
+pub struct VkOffset3D {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkBufferImageCopy.html
+#[repr(C)]
+pub struct VkBufferImageCopy {
+    pub bufferOffset: VkDeviceSize,
+    pub bufferRowLength: u32,
+    pub bufferImageHeight: u32,
+    pub imageSubresource: VkImageSubresourceLayers,
+    pub imageOffset: VkOffset3D,
+    pub imageExtent: VkExtent3D,
+}
+
 #[link(name = "vulkan")]
 extern "C" {
     // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/vkCreateInstance.html
@@ -2920,5 +2951,14 @@ extern "C" {
     pub fn vkGetPhysicalDeviceFeatures2(
         physicalDevice: VkPhysicalDevice,
         pFeatures: *mut VkPhysicalDeviceFeatures2,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyBufferToImage.html
+    pub fn vkCmdCopyBufferToImage(
+        commandBuffer: VkCommandBuffer,
+        srcBuffer: VkBuffer,
+        dstImage: VkImage,
+        dstImageLayout: VkImageLayout,
+        regionCount: u32,
+        pRegions: *const VkBufferImageCopy,
     );
 }
