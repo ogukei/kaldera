@@ -27,7 +27,7 @@ pub struct SceneAsset {
 impl SceneAsset {
     pub fn new() -> Result<Self> {
         log_debug!("loading scene asset");
-        let (document, buffers, images) = gltf::import("/home/user/Downloads/Sponza/glTF/Sponza.gltf").unwrap();
+        let (document, buffers, images) = gltf::import("submodules/kaldera-asset/models/Sponza/glTF/Sponza.gltf").unwrap();
         log_debug!("loading scene asset complete");
         let asset = Self {
             document,
