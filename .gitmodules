@@ -1,0 +1,3 @@
+[submodule "submodules/kaldera-asset"]
+	path = submodules/kaldera-asset
+	url = ../kaldera-asset
