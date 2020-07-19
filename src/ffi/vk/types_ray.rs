@@ -140,7 +140,7 @@ pub struct VkAccelerationStructureGeometryTrianglesDataKHR {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct VkAccelerationStructureGeometryAabbsDataKHR {
-    pub sType: VkStructureType,
+    pub sType: VkStructureTypeExtRay,
     pub pNext: *const c_void,
     pub data: VkDeviceAddress,
     pub stride: VkDeviceSize,

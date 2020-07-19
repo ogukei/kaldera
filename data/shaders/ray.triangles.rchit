@@ -2,6 +2,10 @@
 #extension GL_EXT_ray_tracing : enable
 #extension GL_EXT_nonuniform_qualifier : enable
 #extension GL_EXT_scalar_block_layout : enable
+#extension GL_GOOGLE_include_directive : enable
+
+#include "ray.common.glsl"
+#include "ray.common.payload.glsl"
 
 // https://github.com/nvpro-samples/vk_raytracing_tutorial_KHR/blob/master/ray_tracing__simple/shaders/raytrace.rchit
 // https://github.com/SaschaWillems/Vulkan-Samples/tree/fc55746e485fbaa1aa0ecafd388759e6c6d00bf5/samples/extensions/raytracing_basic
@@ -13,7 +17,7 @@ struct MeshPrimitiveDescription {
   uint reserved;
 };
 
-layout(location = 0) rayPayloadInEXT vec3 hitValue;
+layout(location = 0) rayPayloadInEXT RayPayload payload;
 layout(binding = 3) readonly buffer Vertices { float vertices[]; };
 layout(binding = 4) readonly buffer Indices { uint indices[]; };
 layout(binding = 5) readonly buffer Normals { float normals[]; };
@@ -78,5 +82,5 @@ void main() {
   // Diffuse
   const vec3 light = vec3(lightDiffuse(vec3(0.0f, 5.0f, 0.0f), worldPosition, worldNormal));
   const vec3 finalColor = textureDiffuse * light;
-  hitValue = finalColor;
+  payload.hitValue = finalColor;
 }

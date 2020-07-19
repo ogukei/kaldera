@@ -145,12 +145,225 @@ impl<'a> Material<'a> {
     }
 }
 
+struct AABB {
+    min: glm::Vec3,
+    max: glm::Vec3,
+}
+
+impl AABB {
+    fn sphere(center: &glm::Vec3, radius: f32) -> Self {
+        let radius = glm::vec3(radius, radius, radius);
+        let min = center - radius;
+        let max = center + radius;
+        Self {
+            min,
+            max,
+        }
+    }
+}
+
+struct Xorshift64 {
+    x: u64,
+}
+
+impl Xorshift64 {
+    fn new() -> Self {
+        Self { x: 88172645463325252, }
+    }
+
+    fn next(&mut self) -> u64 {
+        let mut x = self.x;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.x = x;
+        x
+    }
+
+    // @see http://prng.di.unimi.it/
+    // xoshiro / xoroshiro generators and the PRNG shootout, 
+    // section "Generating uniform doubles in the unit interval"
+    fn next_uniform(&mut self) -> f64 {
+        let v = self.next();
+        let v = (v >> 12) | 0x3ff0000000000000u64;
+        f64::from_bits(v) - 1.0
+    }
+
+    fn next_uniform_f32(&mut self) -> f32 {
+        self.next_uniform() as f32
+    }
+}
+
+struct SphereMaterial {
+    albedo: glm::Vec4,
+    tp: glm::UVec4,
+}
+
+impl SphereMaterial {
+    fn lambertian(x: f32, y: f32, z: f32) -> Self {
+        let albedo = glm::vec4(x, y, z, 0.0);
+        let tp = glm::vec4(0u32, 0, 0, 0);
+        Self {
+            albedo,
+            tp,
+        }
+    }
+
+    fn metal(x: f32, y: f32, z: f32, w: f32) -> Self {
+        let albedo = glm::vec4(x, y, z, w);
+        let tp = glm::vec4(1u32, 0, 0, 0);
+        Self {
+            albedo,
+            tp,
+        }
+    }
+
+    fn dielectric() -> Self {
+        let albedo = glm::vec4(0.0, 0.0, 0.0, 1.5);
+        let tp = glm::vec4(2u32, 0, 0, 0);
+        Self {
+            albedo,
+            tp,
+        }
+    }
+
+    fn random(rng: &mut Xorshift64) -> Self {
+        let choose = rng.next_uniform();
+        if choose < 0.8 {
+            Self::lambertian(
+                rng.next_uniform_f32() * rng.next_uniform_f32(), 
+                rng.next_uniform_f32() * rng.next_uniform_f32(), 
+                rng.next_uniform_f32() * rng.next_uniform_f32())
+        } else if choose < 0.98 {
+            let x = rng.next_uniform_f32();
+            let y = rng.next_uniform_f32();
+            let z = rng.next_uniform_f32();
+            let w = 0.5 * rng.next_uniform_f32();
+            Self::metal(x, y, z, w)
+        } else {
+            Self::dielectric()
+        }
+    }
+}
+
+struct SphereGenerator {
+    rng: Xorshift64,
+}
+
+impl SphereGenerator {
+    fn new() -> Self {
+        Self { rng: Xorshift64::new() }
+    }
+
+    fn gen_vec4(&mut self, x: isize, z: isize) -> glm::Vec4 {
+        let x = x as f32 + 0.9 * self.rng.next_uniform_f32();
+        let y = 0.2;
+        let z = z as f32 + 0.9 * self.rng.next_uniform_f32();
+        let v = glm::vec4(x, y, z, 0.2);
+        v
+    }
+
+    fn generate(&mut self, spheres: &mut Vec<glm::Vec4>, sphere_materials: &mut Vec<SphereMaterial>) {
+        let mut rng = Xorshift64::new();
+        for x in -7..7isize {
+            for z in -7..7isize {
+                let mut v: glm::Vec4;
+                loop {
+                    v = self.gen_vec4(x, z);
+                    let intersects = spheres.iter()
+                        .any(|s| glm::distance(&s.xyz(), &v.xyz()) < (s.w + v.w));
+                    if !intersects {
+                        break;
+                    }
+                }
+                spheres.push(v);
+                sphere_materials.push(SphereMaterial::random(&mut rng));
+            }
+        }
+    }
+}
+
+struct SceneProceduralGeometry {
+    aabb_buffer: Arc<DedicatedStagingBuffer>,
+    sphere_buffer: Arc<DedicatedStagingBuffer>,
+    structures: Vec<Arc<BottomLevelAccelerationStructure>>,
+    sphere_material_buffer: Arc<DedicatedStagingBuffer>,
+}
+
+impl SceneProceduralGeometry {
+    fn new(aabbs: &Vec<AABB>, spheres: &Vec<glm::Vec4>, materials: &Vec<SphereMaterial>, command_pool: &Arc<CommandPool>) -> Result<Arc<Self>> {
+        let device = command_pool.queue().device();
+        let num_aabb = aabbs.len();
+        let aabb_buffer_size = num_aabb * std::mem::size_of::<AABB>();
+        let aabb_buffer = DedicatedStagingBuffer::new(command_pool, 
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
+                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            aabb_buffer_size as VkDeviceSize,
+        )?;
+        let sphere_buffer_size = spheres.len() * std::mem::size_of::<[f32; 4]>();
+        let sphere_buffer = DedicatedStagingBuffer::new(command_pool, 
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
+                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            sphere_buffer_size as VkDeviceSize,
+        )?;
+        let sphere_material_buffer_size = spheres.len() * std::mem::size_of::<SphereMaterial>();
+        let sphere_material_buffer = DedicatedStagingBuffer::new(command_pool, 
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
+                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            sphere_material_buffer_size as VkDeviceSize,
+        )?;
+        unsafe {
+            aabb_buffer.update(aabb_buffer_size as VkDeviceSize, |data| {
+                let dst = data as *mut u8;
+                std::ptr::copy_nonoverlapping(aabbs.as_ptr() as *const u8, dst, aabb_buffer_size);
+            });
+            sphere_buffer.update(sphere_buffer_size as VkDeviceSize, |data| {
+                let dst = data as *mut u8;
+                std::ptr::copy_nonoverlapping(spheres.as_ptr() as *const u8, dst, sphere_buffer_size);
+            });
+            sphere_material_buffer.update(sphere_material_buffer_size as VkDeviceSize, |data| {
+                let dst = data as *mut u8;
+                std::ptr::copy_nonoverlapping(materials.as_ptr() as *const u8, dst, sphere_material_buffer_size);
+            });
+        }
+        assert_eq!(std::mem::size_of::<AABB>(), std::mem::size_of::<[f32; 6]>());
+        let structure_geometry = BottomLevelAccelerationStructureAABBsGeometry::new(
+            num_aabb as u32, 
+            aabb_buffer.device_buffer_memory())?;
+        let builder = BottomLevelAccelerationStructuresBuilder::new(command_pool, std::slice::from_ref(&structure_geometry));
+        let structures = builder.build()?;
+        let geometry = Self {
+            aabb_buffer,
+            structures,
+            sphere_buffer,
+            sphere_material_buffer,
+        };
+        Ok(Arc::new(geometry))
+    }
+
+    fn structures(&self) -> &Vec<Arc<BottomLevelAccelerationStructure>> {
+        &self.structures
+    }
+
+    fn sphere_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.sphere_buffer
+    }
+
+    fn sphere_material_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.sphere_material_buffer
+    }
+}
+
 pub struct Scene {
     primitives: Vec<Arc<SceneMeshPrimitive>>,
     staging_buffers: Arc<SceneStagingBuffers>,
     top_level_acceleration_structure: Arc<TopLevelAccelerationStructure>,
     materials: Vec<Arc<SceneMeshMaterial>>,
     textures: Vec<Arc<Texture>>,
+    procedural: Arc<SceneProceduralGeometry>,
 }
 
 impl Scene {
@@ -183,12 +396,36 @@ impl Scene {
             .map(|(structure, geometry)| SceneMeshPrimitive::new(geometry, structure))
             .collect();
         log_debug!("building blas complete");
+        log_debug!("building blas procedurals");
+        let mut spheres = vec![
+            glm::vec4(0.0, -1000.0, 0.0, 1000.0), 
+            glm::vec4(0.0, 1.0, 0.0, 1.0), 
+            glm::vec4(-4.0, 1.0, 0.0, 1.0),
+            glm::vec4(4.0, 1.0, 0.0, 1.0),
+        ];
+        let mut sphere_materials = vec![
+            SphereMaterial::lambertian(0.5, 0.5, 0.5),
+            SphereMaterial::dielectric(), 
+            SphereMaterial::metal(0.7, 0.6, 0.5, 0.0), 
+            SphereMaterial::lambertian(0.7, 0.6, 0.5),
+        ];
+        SphereGenerator::new().generate(&mut spheres, &mut sphere_materials);
+
+        let aabbs: Vec<_> = spheres.iter()
+            .map(|v| AABB::sphere(&v.xyz(), v.w))
+            .collect();
+        let procedural = SceneProceduralGeometry::new(&aabbs, &spheres, &sphere_materials, command_pool).unwrap();
+        log_debug!("building blas procedurals complete");
         log_debug!("building tlas");
-        let instances = nodes.into_iter()
+        let node_scale: f32 = 5.0;
+        let node_scale = glm::scaling(&glm::vec3(node_scale, node_scale, node_scale));
+        let node_translate = glm::translation(&glm::vec3(0.0, -20.0, 15.0));
+        let node_instances = nodes.into_iter()
+            .take(0)
             .map(|node| {
                 let index = node.primitive().index();
                 let mesh_primitive = scene_mesh_primitives.get(index).unwrap();
-                let transform = node.transform();
+                let transform = node_translate * node_scale * node.transform();
                 let transform = VkTransformMatrixKHR {
                     matrix: [
                         [transform.m11, transform.m12, transform.m13, transform.m14],
@@ -199,10 +436,31 @@ impl Scene {
                 let instance = TopLevelAccelerationStructureInstance::new(
                     index as u32,
                     transform,
+                    0,
                     mesh_primitive.bottom_level_acceleration_structure(),
                 ).unwrap();
                 instance
-            })
+            });
+        let procedural_instances = procedural.structures().iter()
+            .enumerate()
+            .map(|(index, structure)| {
+                let transform = VkTransformMatrixKHR {
+                    matrix: [
+                        [1.0, 0.0, 0.0, 0.0,],
+                        [0.0, 1.0, 0.0, 0.0,],
+                        [0.0, 0.0, 1.0, 0.0,],
+                    ]
+                };
+                let instance = TopLevelAccelerationStructureInstance::new(
+                    index as u32,
+                    transform,
+                    1,
+                    structure,
+                ).unwrap();
+                instance
+            });
+        let instances = node_instances
+            .chain(procedural_instances)
             .collect();
         let top_level_acceleration_structure = TopLevelAccelerationStructure::new(command_pool, instances)
             .unwrap();
@@ -214,6 +472,7 @@ impl Scene {
             top_level_acceleration_structure,
             materials,
             textures,
+            procedural,
         }
     }
 
@@ -243,6 +502,14 @@ impl Scene {
 
     pub fn textures(&self) -> &Vec<Arc<Texture>> {
         &self.textures
+    }
+
+    pub fn sphere_staging_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.procedural.sphere_buffer()
+    }
+
+    pub fn material_staging_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.procedural.sphere_material_buffer()
     }
 }
 
@@ -602,7 +869,7 @@ impl SceneMeshPrimitiveGeometry {
         let num_vertices = mesh_primitive.primitive.positions.count();
         let num_indices = mesh_primitive.primitive.indices.count();
         assert_eq!(mesh_primitive.primitive.positions.count(), mesh_primitive.primitive.normals.count());
-        let structure_geometry = BottomLevelAccelerationStructureGeometry::new(
+        let structure_geometry = BottomLevelAccelerationStructureTrianglesGeometry::new(
                 num_vertices as u32, 
                 vertex_stride as VkDeviceSize,
                 mesh_primitive.offset.vertex_offset as u32,

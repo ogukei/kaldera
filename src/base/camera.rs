@@ -21,7 +21,7 @@ impl OrbitalCamera {
         let inv_proj = glm::inverse(&perspective);
         let rotation_x: f32 = -0.24;
         let rotation_y: f32 = 0.36;
-        let distance: f32 = 5.0;
+        let distance: f32 = 6.0;
         let quat = orbital_quat(rotation_x, rotation_y);
         Self {
             quat: quat,
@@ -50,7 +50,7 @@ impl OrbitalCamera {
 
     pub fn update(&mut self, delta_time: f32) {
         // TODO(ogukei): adjust speed by over time
-        self.quat = glm::quat_slerp(&self.quat, &self.quat_target, 0.5);
+        self.quat = glm::quat_slerp(&self.quat, &self.quat_target, 0.15);
         let view = view(&self.quat, self.distance);
         self.inv_view = glm::inverse(&view);
     }
@@ -74,7 +74,7 @@ fn orbital_quat(rotation_x: f32, rotation_y: f32) -> glm::Quat {
 fn view(quat: &glm::Quat, radius: f32) -> glm::Mat4 {
     let dir = glm::vec3(0.0, 0.0, -radius);
     let translation = glm::translate(&glm::identity(), &dir);
-    let center = glm::translate(&glm::identity(), &glm::vec3(0.0, -2.0, 0.0));
+    let center = glm::translate(&glm::identity(), &glm::vec3(0.0, 0.0, 0.0));
     let rotation = glm::quat_to_mat4(&quat);
     translation * rotation * center
 }

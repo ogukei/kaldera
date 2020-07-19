@@ -138,7 +138,111 @@ impl BottomLevelAccelerationStructure {
     }
 }
 
-pub struct BottomLevelAccelerationStructureGeometry {
+pub enum BottomLevelAccelerationStructureGeometry {
+    Triangles(Arc<BottomLevelAccelerationStructureTrianglesGeometry>),
+    AABBs(Arc<BottomLevelAccelerationStructureAABBsGeometry>),
+}
+
+impl BottomLevelAccelerationStructureGeometry {
+    fn type_info_vec(&self) -> &Vec<VkAccelerationStructureCreateGeometryTypeInfoKHR> {
+        match &self {
+            Self::Triangles(triangles) => triangles.type_info_vec(),
+            Self::AABBs(aabbs) => aabbs.type_info_vec(),
+        }
+    }
+
+    fn info_vec(&self) -> &Vec<VkAccelerationStructureGeometryKHR> {
+        match &self {
+            Self::Triangles(triangles) => triangles.info_vec(),
+            Self::AABBs(aabbs) => aabbs.info_vec(),
+        }
+    }
+
+    fn offset_vec(&self) -> &Vec<VkAccelerationStructureBuildOffsetInfoKHR> {
+        match &self {
+            Self::Triangles(triangles) => triangles.offset_vec(),
+            Self::AABBs(aabbs) => aabbs.offset_vec(),
+        }
+    }
+}
+
+pub struct BottomLevelAccelerationStructureAABBsGeometry {
+    type_info_vec: Vec<VkAccelerationStructureCreateGeometryTypeInfoKHR>,
+    info_vec: Vec<VkAccelerationStructureGeometryKHR>,
+    offset_vec: Vec<VkAccelerationStructureBuildOffsetInfoKHR>,
+    aabb_buffer_memory: Arc<DedicatedBufferMemory>,
+}
+
+impl BottomLevelAccelerationStructureAABBsGeometry {
+    pub fn new(
+        aabb_count: u32, 
+        aabb_buffer_memory: &Arc<DedicatedBufferMemory>,
+    ) -> Result<Arc<BottomLevelAccelerationStructureGeometry>> {
+        Self::init(aabb_count, aabb_buffer_memory)
+            .map(|v| BottomLevelAccelerationStructureGeometry::AABBs(v))
+            .map(Arc::new)
+    }
+
+    fn init(
+        aabb_count: u32, 
+        aabb_buffer_memory: &Arc<DedicatedBufferMemory>,
+    ) -> Result<Arc<Self>> {
+        let stride = std::mem::size_of::<[f32; 6]>() as VkDeviceSize;
+        let type_info = VkAccelerationStructureCreateGeometryTypeInfoKHR {
+            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR,
+            pNext: ptr::null(),
+            geometryType: VkGeometryTypeKHR::VK_GEOMETRY_TYPE_AABBS_KHR,
+            maxPrimitiveCount: aabb_count,
+            indexType: VkIndexType::VK_INDEX_TYPE_NONE_KHR,
+            maxVertexCount: 0,
+            vertexFormat: VkFormat::VK_FORMAT_UNDEFINED,
+            allowsTransforms: VK_FALSE,
+        };
+        let aabbs_data = VkAccelerationStructureGeometryAabbsDataKHR {
+            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR,
+            pNext: ptr::null(),
+            data: aabb_buffer_memory.buffer_device_address(),
+            stride: stride,
+        };
+        let geometry_data = VkAccelerationStructureGeometryDataKHR {
+            aabbs: aabbs_data,
+        };
+        let info = VkAccelerationStructureGeometryKHR {
+            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+            pNext: ptr::null(),
+            geometryType: VkGeometryTypeKHR::VK_GEOMETRY_TYPE_AABBS_KHR,
+            geometry: geometry_data,
+            flags: VK_GEOMETRY_OPAQUE_BIT_KHR as VkGeometryFlagsKHR,
+        };
+        let offset = VkAccelerationStructureBuildOffsetInfoKHR {
+            primitiveCount: aabb_count,
+            primitiveOffset: 0,
+            firstVertex: 0,
+            transformOffset: 0,
+        };
+        let geometry = Self {
+            type_info_vec: vec![type_info],
+            info_vec: vec![info],
+            offset_vec: vec![offset],
+            aabb_buffer_memory: Arc::clone(aabb_buffer_memory),
+        };
+        Ok(Arc::new(geometry))
+    }
+
+    fn type_info_vec(&self) -> &Vec<VkAccelerationStructureCreateGeometryTypeInfoKHR> {
+        &self.type_info_vec
+    }
+
+    fn info_vec(&self) -> &Vec<VkAccelerationStructureGeometryKHR> {
+        &self.info_vec
+    }
+
+    fn offset_vec(&self) -> &Vec<VkAccelerationStructureBuildOffsetInfoKHR> {
+        &self.offset_vec
+    }
+}
+
+pub struct BottomLevelAccelerationStructureTrianglesGeometry {
     type_info_vec: Vec<VkAccelerationStructureCreateGeometryTypeInfoKHR>,
     info_vec: Vec<VkAccelerationStructureGeometryKHR>,
     offset_vec: Vec<VkAccelerationStructureBuildOffsetInfoKHR>,
@@ -146,7 +250,7 @@ pub struct BottomLevelAccelerationStructureGeometry {
     index_buffer_memory: Arc<DedicatedBufferMemory>,
 }
 
-impl BottomLevelAccelerationStructureGeometry {
+impl BottomLevelAccelerationStructureTrianglesGeometry {
     pub fn new(
         num_vertices: u32,
         vertex_stride: VkDeviceSize,
@@ -155,7 +259,7 @@ impl BottomLevelAccelerationStructureGeometry {
         num_indices: u32,
         index_offset_index: u32,
         index_buffer_memory: &Arc<DedicatedBufferMemory>,
-    ) -> Result<Arc<Self>> {
+    ) -> Result<Arc<BottomLevelAccelerationStructureGeometry>> {
         unsafe { 
             Self::init(num_vertices, 
                 vertex_stride, 
@@ -163,7 +267,9 @@ impl BottomLevelAccelerationStructureGeometry {
                 vertex_buffer_memory, 
                 num_indices, 
                 index_offset_index, 
-                index_buffer_memory) 
+                index_buffer_memory)
+                .map(|v| BottomLevelAccelerationStructureGeometry::Triangles(v))
+                .map(Arc::new)
         }
     }
 
@@ -468,6 +574,7 @@ impl Drop for AccelerationStructure {
 pub struct TopLevelAccelerationStructureInstance {
     instance_custom_index: u32,
     transform: VkTransformMatrixKHR,
+    hit_group: u32,
     bottom_level_acceleration_structure: Arc<BottomLevelAccelerationStructure>,
 }
 
@@ -475,11 +582,13 @@ impl TopLevelAccelerationStructureInstance {
     pub fn new(
         instance_custom_index: u32, 
         transform: VkTransformMatrixKHR,
+        hit_group: u32,
         bottom_level_acceleration_structure: &Arc<BottomLevelAccelerationStructure>,
     ) -> Result<Arc<Self>> {
         let instance = Self {
             instance_custom_index,
             transform,
+            hit_group,
             bottom_level_acceleration_structure: Arc::clone(bottom_level_acceleration_structure),
         };
         Ok(Arc::new(instance))
@@ -498,6 +607,11 @@ impl TopLevelAccelerationStructureInstance {
     #[inline]
     fn transform(&self) -> VkTransformMatrixKHR {
         self.transform.clone()
+    }
+
+    #[inline]
+    fn hit_group(&self) -> u32 {
+        self.hit_group
     }
 }
 
@@ -549,11 +663,13 @@ impl TopLevelAccelerationStructure {
                 let custom_index = instance.instance_custom_index();
                 let structure = instance.bottom_level_acceleration_structure();
                 let transform = instance.transform();
+                let hit_group = instance.hit_group();
                 let instance = VkAccelerationStructureInstanceKHR {
                     transform: transform,
                     instanceCustomIndexAndMask: (0xff << 24) | (custom_index & ((1u32 << 25) - 1)),
                     instanceShaderBindingTableRecordOffsetAndFlags: 
-                        (VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR as VkFlags) << 24,
+                        ((VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR as VkFlags) << 24)
+                            | (hit_group & 0xff),
                     accelerationStructureReference: structure.structure_device_address(),
                 };
                 instance
@@ -706,6 +822,17 @@ impl RayTracingGraphicsPipeline {
                     8,
                     textures_count,
                 ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32 
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_INTERSECTION_BIT_KHR as u32,
+                    9,
+                ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    10,
+                ),
             ];
             let create_info = VkDescriptorSetLayoutCreateInfo::new(bindings.len() as u32, bindings.as_ptr());
             vkCreateDescriptorSetLayout(device.handle(), &create_info, ptr::null(), descriptor_set_layout.as_mut_ptr())
@@ -723,13 +850,17 @@ impl RayTracingGraphicsPipeline {
         }
         let pipeline_layout = pipeline_layout.assume_init();
         // Shader Stages
-        let raygen_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.raygen.rgen.spv")).unwrap();
-        let rmiss_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.miss.rmiss.spv")).unwrap();
-        let rchit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.closesthit.rchit.spv")).unwrap();
+        let raygen_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.rgen.spv")).unwrap();
+        let rmiss_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.rmiss.spv")).unwrap();
+        let triangles_rchit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.triangles.rchit.spv")).unwrap();
+        let procedural_rint_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.procedural.rint.spv")).unwrap();
+        let procedural_rchit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.procedural.rchit.spv")).unwrap();
         let shader_entry_point = CString::new("main").unwrap();
         const INDEX_RAYGEN: u32 = 0;
         const INDEX_MISS: u32 = 1;
-        const INDEX_CLOSEST_HIT: u32 = 2;
+        const INDEX_TRIANGLES_CLOSEST_HIT: u32 = 2;
+        const INDEX_PROCEDURAL_INTERSECTION: u32 = 3;
+        const INDEX_PROCEDURAL_CLOSEST_HIT: u32 = 4;
         let shader_stages = vec![
             VkPipelineShaderStageCreateInfo {
                 sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -754,7 +885,25 @@ impl RayTracingGraphicsPipeline {
                 pNext: ptr::null(),
                 flags: 0,
                 stage: VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
-                module: rchit_shader_module.handle(),
+                module: triangles_rchit_shader_module.handle(),
+                pName: shader_entry_point.as_ptr(),
+                pSpecializationInfo: ptr::null(),
+            },
+            VkPipelineShaderStageCreateInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                stage: VkShaderStageFlagBits::VK_SHADER_STAGE_INTERSECTION_BIT_KHR,
+                module: procedural_rint_shader_module.handle(),
+                pName: shader_entry_point.as_ptr(),
+                pSpecializationInfo: ptr::null(),
+            },
+            VkPipelineShaderStageCreateInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                stage: VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
+                module: procedural_rchit_shader_module.handle(),
                 pName: shader_entry_point.as_ptr(),
                 pSpecializationInfo: ptr::null(),
             },
@@ -785,9 +934,19 @@ impl RayTracingGraphicsPipeline {
                 pNext: ptr::null(),
                 r#type: VkRayTracingShaderGroupTypeKHR::VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
                 generalShader: VK_SHADER_UNUSED_KHR,
-                closestHitShader: INDEX_CLOSEST_HIT,
+                closestHitShader: INDEX_TRIANGLES_CLOSEST_HIT,
                 anyHitShader: VK_SHADER_UNUSED_KHR,
                 intersectionShader: VK_SHADER_UNUSED_KHR,
+                pShaderGroupCaptureReplayHandle: ptr::null(),
+            },
+            VkRayTracingShaderGroupCreateInfoKHR {
+                sType: VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+                pNext: ptr::null(),
+                r#type: VkRayTracingShaderGroupTypeKHR::VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR,
+                generalShader: VK_SHADER_UNUSED_KHR,
+                closestHitShader: INDEX_PROCEDURAL_CLOSEST_HIT,
+                anyHitShader: VK_SHADER_UNUSED_KHR,
+                intersectionShader: INDEX_PROCEDURAL_INTERSECTION,
                 pShaderGroupCaptureReplayHandle: ptr::null(),
             },
         ];
@@ -871,6 +1030,8 @@ pub struct RayTracingDescriptorSets {
     description_storage_buffer: Arc<DedicatedStagingBuffer>,
     texcoord_storage_buffer: Arc<DedicatedStagingBuffer>,
     textures: Vec<Arc<Texture>>,
+    sphere_storage_buffer: Arc<DedicatedStagingBuffer>,
+    material_storage_buffer: Arc<DedicatedStagingBuffer>,
     descriptor_pool: VkDescriptorPool,
     descriptor_set: VkDescriptorSet,
 }
@@ -887,6 +1048,8 @@ impl RayTracingDescriptorSets {
         description_storage_buffer: &Arc<DedicatedStagingBuffer>,
         texcoord_storage_buffer: &Arc<DedicatedStagingBuffer>,
         textures: &[Arc<Texture>],
+        sphere_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        material_storage_buffer: &Arc<DedicatedStagingBuffer>,
     ) -> Result<Arc<Self>> {
         unsafe {
             Self::init(pipeline, 
@@ -899,6 +1062,8 @@ impl RayTracingDescriptorSets {
                 description_storage_buffer,
                 texcoord_storage_buffer,
                 textures,
+                sphere_storage_buffer,
+                material_storage_buffer,
             )
         }
     }
@@ -914,6 +1079,8 @@ impl RayTracingDescriptorSets {
         description_storage_buffer: &Arc<DedicatedStagingBuffer>,
         texcoord_storage_buffer: &Arc<DedicatedStagingBuffer>,
         textures: &[Arc<Texture>],
+        sphere_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        material_storage_buffer: &Arc<DedicatedStagingBuffer>,
     ) -> Result<Arc<Self>> {
         let device = pipeline.device();
         // Descriptor Pool
@@ -929,6 +1096,8 @@ impl RayTracingDescriptorSets {
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, textures.len() as u32),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
             ];
             let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr());
             vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), descriptor_pool.as_mut_ptr())
@@ -1037,6 +1206,24 @@ impl RayTracingDescriptorSets {
             8,
             texture_descriptors.len(),
             texture_descriptors.as_ptr());
+        let write_sphere_buffer_info = VkDescriptorBufferInfo {
+            buffer: sphere_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: sphere_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_sphere_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            9,
+            &write_sphere_buffer_info);
+        let write_material_buffer_info = VkDescriptorBufferInfo {
+            buffer: material_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: material_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_material_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            10,
+            &write_material_buffer_info);
         let write_descriptor_sets = vec![
             write_acceleration_structure,
             write_image,
@@ -1047,6 +1234,8 @@ impl RayTracingDescriptorSets {
             write_description_buffer,
             write_texcoord_buffer,
             write_texture_images,
+            write_sphere_buffer,
+            write_material_buffer,
         ];
         vkUpdateDescriptorSets(device.handle(), 
             write_descriptor_sets.len() as u32, 
@@ -1065,6 +1254,8 @@ impl RayTracingDescriptorSets {
             description_storage_buffer: Arc::clone(description_storage_buffer),
             texcoord_storage_buffer: Arc::clone(texcoord_storage_buffer),
             textures,
+            sphere_storage_buffer: Arc::clone(sphere_storage_buffer),
+            material_storage_buffer: Arc::clone(material_storage_buffer),
             descriptor_pool,
             descriptor_set,
         };
@@ -1104,8 +1295,9 @@ impl ShaderBindingTable {
 
     unsafe fn init(command_pool: &Arc<CommandPool>, pipeline: &Arc<RayTracingGraphicsPipeline>) -> Result<Arc<Self>> {
         let device = command_pool.queue().device();
+        let num_shader_groups = 4usize;
         let properties = device.physical_device().properties_ray_tracing();
-        let table_size = (properties.shaderGroupBaseAlignment * 3) as VkDeviceSize;
+        let table_size = (properties.shaderGroupBaseAlignment as VkDeviceSize) * (num_shader_groups as VkDeviceSize);
         let staging_buffer = DedicatedStagingBuffer::new(command_pool, 
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT as VkBufferUsageFlags 
                 | VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR as VkBufferUsageFlags,
@@ -1114,13 +1306,18 @@ impl ShaderBindingTable {
             .unwrap();
         staging_buffer.update(table_size, |buffer_data| {
             let buffer_data = buffer_data as *mut u8;
-            let data_size = properties.shaderGroupHandleSize as usize * 3;
+            let data_size = properties.shaderGroupHandleSize as usize * num_shader_groups;
             let mut data: Vec<u8> = vec![];
             data.resize(data_size, 0);
-            vkGetRayTracingShaderGroupHandlesKHR(device.handle(), pipeline.handle(), 0, 3, data_size as size_t, data.as_mut_ptr() as *mut c_void)
+            vkGetRayTracingShaderGroupHandlesKHR(device.handle(), 
+                pipeline.handle(), 
+                0, 
+                num_shader_groups as u32, 
+                data_size as size_t, 
+                data.as_mut_ptr() as *mut c_void)
                 .into_result()
                 .unwrap();
-            for i in 0..3isize {
+            for i in 0..(num_shader_groups as isize) {
                 let src_offset = i * properties.shaderGroupHandleSize as isize;
                 let dst_offset = i * properties.shaderGroupBaseAlignment as isize;
                 let src = data.as_mut_ptr().offset(src_offset);

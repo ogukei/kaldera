@@ -7,8 +7,8 @@ use kaldera::vk::*;
 use kaldera::base::*;
 use std::sync::{Arc, Mutex};
 
-const WIDTH: usize = 1280;
-const HEIGHT: usize = 720;
+const WIDTH: usize = 800;
+const HEIGHT: usize = 450;
 
 struct Context {
     camera: Arc<Mutex<OrbitalCamera>>,
@@ -50,7 +50,7 @@ fn main() {
         if let None = context.graphics_render.draw().ok() {
             break
         }
-        std::thread::sleep(std::time::Duration::from_millis(15));
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
     context.device_queues.graphics_queue()
         .wait_idle()
@@ -92,6 +92,8 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
         scene.description_staging_buffer(),
         scene.texcoord_staging_buffer(),
         scene.textures(),
+        scene.sphere_staging_buffer(),
+        scene.material_staging_buffer(),
     )
         .unwrap();
     let raytracing_render = RayTracingGraphicsRender::new(&command_pool, &raytracing_pipeline, &descriptor_sets)

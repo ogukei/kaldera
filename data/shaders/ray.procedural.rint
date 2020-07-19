@@ -1,0 +1,36 @@
+#version 460
+#extension GL_EXT_ray_tracing : require
+#extension GL_EXT_nonuniform_qualifier : enable
+#extension GL_EXT_scalar_block_layout : enable
+
+hitAttributeEXT vec3 attribs;
+
+layout(binding = 9) readonly buffer Spheres { vec4 spheres[]; };
+
+// return the closest intersection in front of the ray
+// @see http://viclw17.github.io/2018/07/16/raytracing-ray-sphere-intersection/
+float hitSphere(const vec3 origin, const vec3 direction, const vec3 center, const float radius) {
+  const vec3 oc = origin - center;
+  const float a = dot(direction, direction);
+  const float b = 2.0 * dot(oc, direction);
+  const float c = dot(oc, oc) - radius * radius;
+  const float discriminant = b * b - 4.0 * a * c;
+  if (discriminant < 0) {
+    return -1.0;
+  }
+  return (-b - sqrt(discriminant)) / (2.0 * a);
+}
+
+void main() {
+  const vec3 origin = gl_WorldRayOriginEXT;
+  const vec3 direction = gl_WorldRayDirectionEXT;
+
+  const vec4 sphere = spheres[gl_PrimitiveID];
+  const vec3 center = sphere.xyz;
+  const float radius = sphere.w;
+
+  const float tHit = hitSphere(origin, direction, center, radius);
+  if (tHit > 0.0) {
+    reportIntersectionEXT(tHit, 0);
+  }
+}
