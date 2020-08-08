@@ -249,8 +249,8 @@ impl SceneGraphicsPipeline {
             pVertexAttributeDescriptions: ptr::null(),
         };
         // shaders
-        let vertex_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/fullscreen.vert.spv")).unwrap();
-        let fragment_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/fullscreen.frag.spv")).unwrap();
+        let vertex_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/blit.vert.spv")).unwrap();
+        let fragment_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/blit.frag.spv")).unwrap();
         let shader_entry_point = CString::new("main").unwrap();
         let shader_stages = vec![
             VkPipelineShaderStageCreateInfo {

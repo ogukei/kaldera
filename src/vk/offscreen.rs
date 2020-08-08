@@ -412,8 +412,8 @@ impl OffscreenGraphicsPipeline {
             pVertexAttributeDescriptions: vertex_input_attributes.as_ptr(),
         };
         // shaders
-        let vertex_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/triangle.vert.spv")).unwrap();
-        let fragment_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/triangle.frag.spv")).unwrap();
+        let vertex_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/raster.triangle.vert.spv")).unwrap();
+        let fragment_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/raster.triangle.frag.spv")).unwrap();
         let shader_entry_point = CString::new("main").unwrap();
         let shader_stages = vec![
             VkPipelineShaderStageCreateInfo {
