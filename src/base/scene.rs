@@ -398,19 +398,15 @@ impl Scene {
         log_debug!("building blas complete");
         log_debug!("building blas procedurals");
         let mut spheres = vec![
-            glm::vec4(0.0, -1000.0, 0.0, 1000.0), 
             glm::vec4(0.0, 1.0, 0.0, 1.0), 
             glm::vec4(-4.0, 1.0, 0.0, 1.0),
             glm::vec4(4.0, 1.0, 0.0, 1.0),
         ];
         let mut sphere_materials = vec![
-            SphereMaterial::lambertian(0.5, 0.5, 0.5),
             SphereMaterial::dielectric(), 
             SphereMaterial::metal(0.7, 0.6, 0.5, 0.0), 
             SphereMaterial::lambertian(0.7, 0.6, 0.5),
         ];
-        SphereGenerator::new().generate(&mut spheres, &mut sphere_materials);
-
         let aabbs: Vec<_> = spheres.iter()
             .map(|v| AABB::sphere(&v.xyz(), v.w))
             .collect();
@@ -419,9 +415,8 @@ impl Scene {
         log_debug!("building tlas");
         let node_scale: f32 = 5.0;
         let node_scale = glm::scaling(&glm::vec3(node_scale, node_scale, node_scale));
-        let node_translate = glm::translation(&glm::vec3(0.0, -20.0, 15.0));
+        let node_translate = glm::translation(&glm::vec3(0.0, -20.0, 0.0));
         let node_instances = nodes.into_iter()
-            .take(0)
             .map(|node| {
                 let index = node.primitive().index();
                 let mesh_primitive = scene_mesh_primitives.get(index).unwrap();

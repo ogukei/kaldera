@@ -7,8 +7,8 @@ use kaldera::vk::*;
 use kaldera::base::*;
 use std::sync::{Arc, Mutex};
 
-const WIDTH: usize = 800;
-const HEIGHT: usize = 450;
+const WIDTH: usize = 1600;
+const HEIGHT: usize = 900;
 
 struct Context {
     camera: Arc<Mutex<OrbitalCamera>>,
