@@ -13,8 +13,13 @@
 struct MeshPrimitiveDescription {
   uint vertexOffset;
   uint indexOffset;
-  uint textureIndex;
+  uint materialIndex;
   uint reserved;
+};
+
+struct MaterialDescription {
+  int colorTextureIndex;
+  int normalTextureIndex;
 };
 
 layout(location = 0) rayPayloadInEXT RayPayload payload;
@@ -24,6 +29,7 @@ layout(binding = 5) readonly buffer Normals { float normals[]; };
 layout(binding = 6) readonly buffer Descriptions { MeshPrimitiveDescription descriptions[]; };
 layout(binding = 7) readonly buffer Texcoords { float texcoords[]; };
 layout(binding = 8) uniform sampler2D textures[];
+layout(binding = 11) readonly buffer Materials { MaterialDescription materials[]; };
 
 hitAttributeEXT vec3 attribs;
 
@@ -78,7 +84,8 @@ void main() {
   const vec2 uv1 = texcoordAt(triangleIndex.y);
   const vec2 uv2 = texcoordAt(triangleIndex.z);
   const vec2 texcoord0 = uv0 * barycentrics.x + uv1 * barycentrics.y + uv2 * barycentrics.z;
-  const vec3 textureDiffuse = texture(textures[nonuniformEXT(desc.textureIndex)], texcoord0).xyz;
+  const MaterialDescription material = materials[nonuniformEXT(desc.materialIndex)];
+  const vec3 textureDiffuse = texture(textures[nonuniformEXT(material.colorTextureIndex)], texcoord0).xyz;
   // Diffuse
   const vec3 light = vec3(lightDiffuse(vec3(0.0f, 5.0f, 0.0f), worldPosition, worldNormal));
   const vec3 finalColor = textureDiffuse * light;

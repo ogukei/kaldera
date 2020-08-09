@@ -94,6 +94,7 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
         scene.textures(),
         scene.sphere_staging_buffer(),
         scene.material_staging_buffer(),
+        scene.material_description_staging_buffer(),
     )
         .unwrap();
     let raytracing_render = RayTracingGraphicsRender::new(&command_pool, &raytracing_pipeline, &descriptor_sets)

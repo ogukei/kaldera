@@ -24,30 +24,55 @@ use super::buffer::*;
 use super::primitive::*;
 
 pub struct SceneMeshMaterial {
-    texture: Arc<Texture>,
+    color_texture: Arc<Texture>,
+    normal_texture: Option<Arc<Texture>>,
 }
 
 impl SceneMeshMaterial {
     pub fn new(material: &Material, command_pool: &Arc<CommandPool>) -> Arc<Self> {
-        let pixels = material.pixels().pixels();
-        let data = pixels.as_ptr() as *const c_void;
-        let data_size = pixels.len();
-        let extent = VkExtent3D {
-            width: material.image().width,
-            height: material.image().height,
-            depth: 1,
+        let color_texture = {
+            let pixels = material.color_pixels().pixels();
+            let data = pixels.as_ptr() as *const c_void;
+            let data_size = pixels.len();
+            let extent = VkExtent3D {
+                width: material.color_image().width,
+                height: material.color_image().height,
+                depth: 1,
+            };
+            let device = command_pool.queue().device();
+            let texture_image = TextureImage::new(device, extent).unwrap();
+            let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
+            texture
         };
-        let device = command_pool.queue().device();
-        let texture_image = TextureImage::new(device, extent).unwrap();
-        let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
+        let normal_texture = material.normal_pixels()
+            .map(|pixels| {
+                let image = material.normal_image().unwrap();
+                let pixels = pixels.pixels();
+                let data = pixels.as_ptr() as *const c_void;
+                let data_size = pixels.len();
+                let extent = VkExtent3D {
+                    width: image.width,
+                    height: image.height,
+                    depth: 1,
+                };
+                let device = command_pool.queue().device();
+                let texture_image = TextureImage::new(device, extent).unwrap();
+                let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
+                texture
+            });
         let mesh_material = Self {
-            texture,
+            color_texture,
+            normal_texture,
         };
         Arc::new(mesh_material)
     }
 
-    pub fn texture(&self) -> &Arc<Texture> {
-        &self.texture
+    pub fn color_texture(&self) -> &Arc<Texture> {
+        &self.color_texture
+    }
+
+    pub fn normal_texture(&self) -> Option<&Arc<Texture>> {
+        self.normal_texture.as_ref()
     }
 }
 
@@ -56,7 +81,7 @@ impl SceneMeshMaterial {
 pub struct SceneMeshPrimitiveDescription {
     vertex_offset: u32,
     index_offset: u32,
-    texture_index: u32,
+    material_index: u32,
     reserved: u32,
 }
 
@@ -65,7 +90,7 @@ impl SceneMeshPrimitiveDescription {
         Self {
             vertex_offset: offset.vertex_offset as u32,
             index_offset: offset.index_offset as u32,
-            texture_index: material_index,
+            material_index: material_index,
             reserved: 0u32,
         }
     }

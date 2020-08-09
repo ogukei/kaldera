@@ -19,6 +19,7 @@ use VkMemoryPropertyFlagBits::*;
 use VkBufferUsageFlagBits::*;
 
 use super::mesh::*;
+use super::material::*;
 
 
 pub struct SceneStagingBuffers {
@@ -27,10 +28,14 @@ pub struct SceneStagingBuffers {
     normals_buffer: Arc<DedicatedStagingBuffer>,
     description_buffer: Arc<DedicatedStagingBuffer>,
     texcoord_buffer: Arc<DedicatedStagingBuffer>,
+    material_description_buffer: Arc<DedicatedStagingBuffer>,
 }
 
 impl SceneStagingBuffers {
-    pub fn new(command_pool: &Arc<CommandPool>, primitives: &Vec<MeshPrimitive>) -> Arc<Self> {
+    pub fn new(command_pool: &Arc<CommandPool>, 
+        primitives: &Vec<MeshPrimitive>, 
+        material_descriptions: &Vec<SceneMaterialDescription>,
+    ) -> Arc<Self> {
         let num_indices: usize = primitives.iter()
             .map(|v| v.primitive().indices().count())
             .sum();
@@ -82,6 +87,14 @@ impl SceneStagingBuffers {
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
             texcoord_buffer_size as VkDeviceSize,
         ).unwrap();
+        let material_description_buffer_size = std::mem::size_of::<SceneMaterialDescription>() * material_descriptions.len();
+        let material_description_buffer = DedicatedStagingBuffer::new(
+            command_pool, 
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
+                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            material_description_buffer_size as VkDeviceSize,
+        ).unwrap();
         // TODO(ogukei): concurrent uploads
         unsafe {
             index_buffer.update(index_buffer_size as VkDeviceSize, |data| {
@@ -129,6 +142,11 @@ impl SceneStagingBuffers {
                     std::ptr::copy_nonoverlapping(src, dst, byte_size);
                 }
             });
+            material_description_buffer.update(material_description_buffer_size as VkDeviceSize, |data| {
+                let dst = data as *mut u8;
+                let src = material_descriptions.as_ptr() as *const u8;
+                std::ptr::copy_nonoverlapping(src, dst, material_description_buffer_size);
+            });
         }
         let buffer = Self {
             vertex_buffer,
@@ -136,6 +154,7 @@ impl SceneStagingBuffers {
             normals_buffer,
             description_buffer,
             texcoord_buffer,
+            material_description_buffer,
         };
         Arc::new(buffer)
     }
@@ -163,5 +182,10 @@ impl SceneStagingBuffers {
     #[inline]
     pub fn texcoord_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
         &self.texcoord_buffer
+    }
+
+    #[inline]
+    pub fn material_description_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.material_description_buffer
     }
 }

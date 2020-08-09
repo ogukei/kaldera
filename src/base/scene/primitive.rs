@@ -23,6 +23,7 @@ pub struct Primitive<'a> {
     positions: Positions<'a>,
     normals: Normals<'a>,
     texcoords: Texcoords<'a>,
+    tangents: Option<Tangents<'a>>,
     material_index: Option<usize>,
     is_opaque: bool,
 }
@@ -37,6 +38,7 @@ impl<'a> Primitive<'a> {
             normals: Normals::new(&primitive, buffers),
             // TODO(ogukei): support default TEXCOORD_0
             texcoords: Texcoords::new(&primitive, buffers).unwrap(),
+            tangents: Tangents::new(&primitive, buffers),
             material_index,
             is_opaque,
         }
@@ -70,6 +72,11 @@ impl<'a> Primitive<'a> {
     #[inline]
     pub fn texcoords(&self) -> &Texcoords<'a> {
         &self.texcoords
+    }
+
+    #[inline]
+    pub fn tangents(&self) -> Option<&Tangents<'a>> {
+        self.tangents.as_ref()
     }
 }
 
@@ -316,6 +323,69 @@ impl<'a> AccessorTexcoords<'a> {
         Self {
             slice,
             count: texcoords.count(),
+        }
+    }
+}
+
+pub enum Tangents<'a> {
+    Accessor(AccessorTangents<'a>),
+    Vector(Vec<[f32; 4]>)
+}
+
+impl<'a> Tangents<'a> {
+    fn new(primitive: &gltf::Primitive<'a>, buffers: &'a Vec<gltf::buffer::Data>) -> Option<Self> {
+        let tangents = primitive.attributes()
+            .find_map(|(semantic, accessor)| 
+                match semantic { 
+                    Semantic::Tangents => Some(accessor),
+                    _ => None,
+                }
+            )?;
+        let view = tangents.view().unwrap();
+        let use_reference = view.stride() == None
+            && tangents.data_type() == DataType::F32 
+            && tangents.dimensions() == Dimensions::Vec4;
+        let tangents = if use_reference {
+            Self::Accessor(AccessorTangents::new(&tangents, buffers))
+        } else {
+            let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+            let tangents = reader.read_tangents().unwrap();
+            Self::Vector(tangents.collect())
+        };
+        Some(tangents)
+    }
+
+    #[inline]
+    pub fn count(&self) -> usize {
+        match &self {
+            &Self::Accessor(tangents) => tangents.count,
+            &Self::Vector(v) => v.len(),
+        }
+    }
+
+    #[inline]
+    pub fn data(&self) -> *const u8 {
+        match &self {
+            &Self::Accessor(tangents) => tangents.slice.as_ptr(),
+            &Self::Vector(v) => v.as_ptr() as *const _ as *const u8,
+        }
+    }
+}
+
+pub struct AccessorTangents<'a> {
+    slice: &'a [u8],
+    count: usize,
+}
+
+impl<'a> AccessorTangents<'a> {
+    fn new(tangents: &gltf::Accessor<'a>, buffers: &'a Vec<gltf::buffer::Data>) -> Self {
+        let view = tangents.view().unwrap();
+        let buffer = buffers.get(view.buffer().index()).unwrap();
+        let offset = view.offset() + tangents.offset();
+        let slice = &buffer[offset..offset + view.length()];
+        Self {
+            slice,
+            count: tangents.count(),
         }
     }
 }

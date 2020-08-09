@@ -65,18 +65,15 @@ pub struct Scene {
 impl Scene {
     fn new(table: &MeshTable, nodes: &[MeshNode], materials: &[Material], command_pool: &Arc<CommandPool>) -> Self {
         let primitives = table.mesh_primitives();
-        log_debug!("creating staging buffers");
-        let staging_buffers = SceneStagingBuffers::new(command_pool, primitives);
-        log_debug!("creating staging buffers complete");
         log_debug!("creating material images");
         let materials: Vec<_> = materials.iter()
             .map(|v| SceneMeshMaterial::new(v, command_pool))
             .collect();
-        let textures: Vec<_> = materials.iter()
-            .map(|v| v.texture())
-            .map(Arc::clone)
-            .collect();
+        let descriptions_textures = MaterialDescriptionsTextures::new(&materials);
         log_debug!("creating material images complete");
+        log_debug!("creating staging buffers");
+        let staging_buffers = SceneStagingBuffers::new(command_pool, primitives, &descriptions_textures.descriptions);
+        log_debug!("creating staging buffers complete");
         log_debug!("building blas");
         let scene_mesh_primitive_geometries: Vec<_> = table.mesh_primitives().iter()
             .map(|v| SceneMeshPrimitiveGeometry::new(v, &staging_buffers, command_pool))
@@ -133,6 +130,7 @@ impl Scene {
                 instance
             });
         let procedural_instances = procedural.structures().iter()
+            .take(0)
             .enumerate()
             .map(|(index, structure)| {
                 let transform = VkTransformMatrixKHR {
@@ -162,7 +160,7 @@ impl Scene {
             staging_buffers,
             top_level_acceleration_structure,
             materials,
-            textures,
+            textures: descriptions_textures.textures,
             procedural,
         }
     }
@@ -189,6 +187,10 @@ impl Scene {
 
     pub fn texcoord_staging_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
         &self.staging_buffers.texcoord_buffer()
+    }
+
+    pub fn material_description_staging_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.staging_buffers.material_description_buffer()
     }
 
     pub fn textures(&self) -> &Vec<Arc<Texture>> {
