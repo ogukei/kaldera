@@ -128,11 +128,13 @@ struct Material<'a> {
     image: &'a gltf::image::Data,
     material: gltf::material::Material<'a>,
     pixels: MaterialImagePixels<'a>,
+    is_opaque: bool,
 }
 
 impl<'a> Material<'a> {
     fn new(material: gltf::material::Material<'a>, images: &'a Vec<gltf::image::Data>) -> Self {
         let model = material.pbr_metallic_roughness();
+        let is_opaque = material.alpha_mode() == gltf::material::AlphaMode::Opaque;
         let color = model.base_color_texture().unwrap();
         let image_index = color.texture().source().index();
         let image = images.get(image_index).unwrap();
@@ -141,6 +143,7 @@ impl<'a> Material<'a> {
             image,
             material,
             pixels,
+            is_opaque,
         }
     }
 }
@@ -871,7 +874,8 @@ impl SceneMeshPrimitiveGeometry {
                 staging_buffers.vertex_buffer().device_buffer_memory(), 
                 num_indices as u32, 
                 mesh_primitive.offset.index_offset as u32,
-                staging_buffers.index_buffer().device_buffer_memory())
+                staging_buffers.index_buffer().device_buffer_memory(),
+                mesh_primitive.is_opaque())
             .unwrap();
         let v = Self {
             index: mesh_primitive.index(),
@@ -932,6 +936,10 @@ impl<'a> MeshPrimitive<'a> {
     fn index(&self) -> usize {
         self.mesh_primitive_index
     }
+
+    fn is_opaque(&self) -> bool {
+        self.primitive.is_opaque
+    }
 }
 
 struct Mesh<'a> {
@@ -966,11 +974,13 @@ struct Primitive<'a> {
     normals: Normals<'a>,
     texcoords: Texcoords<'a>,
     material_index: Option<usize>,
+    is_opaque: bool,
 }
 
 impl<'a> Primitive<'a> {
     fn new(primitive: gltf::Primitive<'a>, buffers: &'a Vec<gltf::buffer::Data>) -> Self {
         let material_index = primitive.material().index();
+        let is_opaque = primitive.material().alpha_mode() == gltf::material::AlphaMode::Opaque;
         Self {
             indices: Indices::new(&primitive, buffers),
             positions: Positions::new(&primitive, buffers),
@@ -978,6 +988,7 @@ impl<'a> Primitive<'a> {
             // TODO(ogukei): support default TEXCOORD_0
             texcoords: Texcoords::new(&primitive, buffers).unwrap(),
             material_index,
+            is_opaque,
         }
     }
 }

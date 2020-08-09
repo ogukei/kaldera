@@ -259,6 +259,7 @@ impl BottomLevelAccelerationStructureTrianglesGeometry {
         num_indices: u32,
         index_offset_index: u32,
         index_buffer_memory: &Arc<DedicatedBufferMemory>,
+        is_opaque: bool,
     ) -> Result<Arc<BottomLevelAccelerationStructureGeometry>> {
         unsafe { 
             Self::init(num_vertices, 
@@ -267,7 +268,9 @@ impl BottomLevelAccelerationStructureTrianglesGeometry {
                 vertex_buffer_memory, 
                 num_indices, 
                 index_offset_index, 
-                index_buffer_memory)
+                index_buffer_memory,
+                is_opaque,
+                )
                 .map(|v| BottomLevelAccelerationStructureGeometry::Triangles(v))
                 .map(Arc::new)
         }
@@ -281,6 +284,7 @@ impl BottomLevelAccelerationStructureTrianglesGeometry {
         num_indices: u32,
         index_offset_index: u32,
         index_buffer_memory: &Arc<DedicatedBufferMemory>,
+        is_opaque: bool,
     ) -> Result<Arc<Self>> {
         // assumes single type info
         let primitive_count = num_indices / 3;
@@ -307,12 +311,17 @@ impl BottomLevelAccelerationStructureTrianglesGeometry {
         let geometry_data = VkAccelerationStructureGeometryDataKHR {
             triangles: triangles_data,
         };
+        let geometry_flags: VkGeometryFlagsKHR = if is_opaque {
+            VK_GEOMETRY_OPAQUE_BIT_KHR as VkGeometryFlagsKHR
+        } else {
+            VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR as VkGeometryFlagsKHR
+        };
         let info = VkAccelerationStructureGeometryKHR {
             sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
             pNext: ptr::null(),
             geometryType: VkGeometryTypeKHR::VK_GEOMETRY_TYPE_TRIANGLES_KHR,
             geometry: geometry_data,
-            flags: VK_GEOMETRY_OPAQUE_BIT_KHR as VkGeometryFlagsKHR,
+            flags: geometry_flags,
         };
         let offset = VkAccelerationStructureBuildOffsetInfoKHR {
             primitiveCount: primitive_count,
@@ -696,7 +705,7 @@ impl TopLevelAccelerationStructure {
             let geometry = VkAccelerationStructureGeometryKHR {
                 sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
                 pNext: ptr::null(),
-                flags: VK_GEOMETRY_OPAQUE_BIT_KHR as VkGeometryFlagsKHR,
+                flags: VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR as VkGeometryFlagsKHR,
                 geometryType: VkGeometryTypeKHR::VK_GEOMETRY_TYPE_INSTANCES_KHR,
                 geometry: geometry_data,
             };
@@ -793,44 +802,52 @@ impl RayTracingGraphicsPipeline {
                 ),
                 VkDescriptorSetLayoutBinding::new(
                     VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
                     3,
                 ),
                 VkDescriptorSetLayoutBinding::new(
                     VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
                     4,
                 ),
                 VkDescriptorSetLayoutBinding::new(
                     VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
                     5,
                 ),
                 VkDescriptorSetLayoutBinding::new(
                     VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
                     6,
                 ),
                 VkDescriptorSetLayoutBinding::new(
                     VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
                     7,
                 ),
                 VkDescriptorSetLayoutBinding::new_array(
                     VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
                     8,
                     textures_count,
                 ),
                 VkDescriptorSetLayoutBinding::new(
                     VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
                     VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32 
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32
                         | VkShaderStageFlagBits::VK_SHADER_STAGE_INTERSECTION_BIT_KHR as u32,
                     9,
                 ),
                 VkDescriptorSetLayoutBinding::new(
                     VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
                     10,
                 ),
             ];
@@ -853,14 +870,16 @@ impl RayTracingGraphicsPipeline {
         let raygen_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.rgen.spv")).unwrap();
         let rmiss_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.rmiss.spv")).unwrap();
         let triangles_rchit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.triangles.rchit.spv")).unwrap();
+        let triangles_rahit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.triangles.rahit.spv")).unwrap();
         let procedural_rint_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.procedural.rint.spv")).unwrap();
         let procedural_rchit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.procedural.rchit.spv")).unwrap();
         let shader_entry_point = CString::new("main").unwrap();
         const INDEX_RAYGEN: u32 = 0;
         const INDEX_MISS: u32 = 1;
         const INDEX_TRIANGLES_CLOSEST_HIT: u32 = 2;
-        const INDEX_PROCEDURAL_INTERSECTION: u32 = 3;
-        const INDEX_PROCEDURAL_CLOSEST_HIT: u32 = 4;
+        const INDEX_TRIANGLES_ANY_HIT: u32 = 3;
+        const INDEX_PROCEDURAL_INTERSECTION: u32 = 4;
+        const INDEX_PROCEDURAL_CLOSEST_HIT: u32 = 5;
         let shader_stages = vec![
             VkPipelineShaderStageCreateInfo {
                 sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -886,6 +905,15 @@ impl RayTracingGraphicsPipeline {
                 flags: 0,
                 stage: VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR,
                 module: triangles_rchit_shader_module.handle(),
+                pName: shader_entry_point.as_ptr(),
+                pSpecializationInfo: ptr::null(),
+            },
+            VkPipelineShaderStageCreateInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                stage: VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR,
+                module: triangles_rahit_shader_module.handle(),
                 pName: shader_entry_point.as_ptr(),
                 pSpecializationInfo: ptr::null(),
             },
@@ -935,7 +963,7 @@ impl RayTracingGraphicsPipeline {
                 r#type: VkRayTracingShaderGroupTypeKHR::VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
                 generalShader: VK_SHADER_UNUSED_KHR,
                 closestHitShader: INDEX_TRIANGLES_CLOSEST_HIT,
-                anyHitShader: VK_SHADER_UNUSED_KHR,
+                anyHitShader: INDEX_TRIANGLES_ANY_HIT,
                 intersectionShader: VK_SHADER_UNUSED_KHR,
                 pShaderGroupCaptureReplayHandle: ptr::null(),
             },
