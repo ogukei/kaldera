@@ -50,7 +50,7 @@ fn main() {
         if let None = context.graphics_render.draw().ok() {
             break
         }
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(std::time::Duration::from_millis(15));
     }
     context.device_queues.graphics_queue()
         .wait_idle()
@@ -95,6 +95,7 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
         scene.sphere_staging_buffer(),
         scene.material_staging_buffer(),
         scene.material_description_staging_buffer(),
+        scene.tangent_staging_buffer(),
     )
         .unwrap();
     let raytracing_render = RayTracingGraphicsRender::new(&command_pool, &raytracing_pipeline, &descriptor_sets)

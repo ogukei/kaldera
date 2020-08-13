@@ -450,14 +450,13 @@ pub struct TextureImage {
 }
 
 impl TextureImage {
-    pub fn new(device: &Arc<Device>, extent: VkExtent3D) -> Result<Arc<Self>> {
+    pub fn new(device: &Arc<Device>, extent: VkExtent3D, format: VkFormat) -> Result<Arc<Self>> {
         unsafe {
-            Self::init(device, extent)
+            Self::init(device, extent, format)
         }
     }
 
-    unsafe fn init(device: &Arc<Device>, extent: VkExtent3D) -> Result<Arc<Self>> {
-        let format = VkFormat::VK_FORMAT_R8G8B8A8_SRGB;
+    unsafe fn init(device: &Arc<Device>, extent: VkExtent3D, format: VkFormat) -> Result<Arc<Self>> {
         fn log2(v: u32) -> Option<u32> {
             if v.count_ones() == 1 { Some(v.trailing_zeros()) } else { None }
         }

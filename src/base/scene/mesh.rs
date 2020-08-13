@@ -40,7 +40,7 @@ impl SceneMeshMaterial {
                 depth: 1,
             };
             let device = command_pool.queue().device();
-            let texture_image = TextureImage::new(device, extent).unwrap();
+            let texture_image = TextureImage::new(device, extent, VkFormat::VK_FORMAT_R8G8B8A8_SRGB).unwrap();
             let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
             texture
         };
@@ -56,7 +56,7 @@ impl SceneMeshMaterial {
                     depth: 1,
                 };
                 let device = command_pool.queue().device();
-                let texture_image = TextureImage::new(device, extent).unwrap();
+                let texture_image = TextureImage::new(device, extent, VkFormat::VK_FORMAT_R8G8B8A8_UNORM).unwrap();
                 let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
                 texture
             });

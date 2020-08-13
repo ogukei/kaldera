@@ -193,6 +193,10 @@ impl Scene {
         &self.staging_buffers.material_description_buffer()
     }
 
+    pub fn tangent_staging_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.staging_buffers.tangent_buffer()
+    }
+
     pub fn textures(&self) -> &Vec<Arc<Texture>> {
         &self.textures
     }

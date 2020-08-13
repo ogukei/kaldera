@@ -29,6 +29,7 @@ pub struct SceneStagingBuffers {
     description_buffer: Arc<DedicatedStagingBuffer>,
     texcoord_buffer: Arc<DedicatedStagingBuffer>,
     material_description_buffer: Arc<DedicatedStagingBuffer>,
+    tangent_buffer: Arc<DedicatedStagingBuffer>,
 }
 
 impl SceneStagingBuffers {
@@ -95,6 +96,14 @@ impl SceneStagingBuffers {
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
             material_description_buffer_size as VkDeviceSize,
         ).unwrap();
+        let tangent_buffer_size = std::mem::size_of::<[f32; 4]>() * num_vertices;
+        let tangent_buffer = DedicatedStagingBuffer::new(
+            command_pool, 
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
+                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            tangent_buffer_size as VkDeviceSize,
+        ).unwrap();
         // TODO(ogukei): concurrent uploads
         unsafe {
             index_buffer.update(index_buffer_size as VkDeviceSize, |data| {
@@ -147,6 +156,20 @@ impl SceneStagingBuffers {
                 let src = material_descriptions.as_ptr() as *const u8;
                 std::ptr::copy_nonoverlapping(src, dst, material_description_buffer_size);
             });
+            tangent_buffer.update(tangent_buffer_size as VkDeviceSize, |data| {
+                let data = data as *mut u8;
+                for primitive in primitives.iter() {
+                    if let Some(tangents) = primitive.primitive().tangents() {
+                        let byte_size = tangents.count() * std::mem::size_of::<[f32; 4]>();
+                        let byte_offset = primitive.offset().vertex_offset * std::mem::size_of::<[f32; 4]>();
+                        let dst = data.offset(byte_offset as isize);
+                        let src = tangents.data();
+                        std::ptr::copy_nonoverlapping(src, dst, byte_size);
+                    } else {
+                        // TODO(ogukei): fill zero
+                    }
+                }
+            });
         }
         let buffer = Self {
             vertex_buffer,
@@ -155,6 +178,7 @@ impl SceneStagingBuffers {
             description_buffer,
             texcoord_buffer,
             material_description_buffer,
+            tangent_buffer,
         };
         Arc::new(buffer)
     }
@@ -187,5 +211,10 @@ impl SceneStagingBuffers {
     #[inline]
     pub fn material_description_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
         &self.material_description_buffer
+    }
+
+    #[inline]
+    pub fn tangent_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.tangent_buffer
     }
 }
