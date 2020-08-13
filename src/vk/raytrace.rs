@@ -850,6 +850,18 @@ impl RayTracingGraphicsPipeline {
                         | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
                     10,
                 ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                    11,
+                ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                    12,
+                ),
             ];
             let create_info = VkDescriptorSetLayoutCreateInfo::new(bindings.len() as u32, bindings.as_ptr());
             vkCreateDescriptorSetLayout(device.handle(), &create_info, ptr::null(), descriptor_set_layout.as_mut_ptr())
@@ -1060,6 +1072,8 @@ pub struct RayTracingDescriptorSets {
     textures: Vec<Arc<Texture>>,
     sphere_storage_buffer: Arc<DedicatedStagingBuffer>,
     material_storage_buffer: Arc<DedicatedStagingBuffer>,
+    material_description_storage_buffer: Arc<DedicatedStagingBuffer>,
+    tangent_storage_buffer: Arc<DedicatedStagingBuffer>,
     descriptor_pool: VkDescriptorPool,
     descriptor_set: VkDescriptorSet,
 }
@@ -1078,6 +1092,8 @@ impl RayTracingDescriptorSets {
         textures: &[Arc<Texture>],
         sphere_storage_buffer: &Arc<DedicatedStagingBuffer>,
         material_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        material_description_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        tangent_storage_buffer: &Arc<DedicatedStagingBuffer>,
     ) -> Result<Arc<Self>> {
         unsafe {
             Self::init(pipeline, 
@@ -1092,6 +1108,8 @@ impl RayTracingDescriptorSets {
                 textures,
                 sphere_storage_buffer,
                 material_storage_buffer,
+                material_description_storage_buffer,
+                tangent_storage_buffer,
             )
         }
     }
@@ -1109,6 +1127,8 @@ impl RayTracingDescriptorSets {
         textures: &[Arc<Texture>],
         sphere_storage_buffer: &Arc<DedicatedStagingBuffer>,
         material_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        material_description_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        tangent_storage_buffer: &Arc<DedicatedStagingBuffer>,
     ) -> Result<Arc<Self>> {
         let device = pipeline.device();
         // Descriptor Pool
@@ -1124,6 +1144,8 @@ impl RayTracingDescriptorSets {
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, textures.len() as u32),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
             ];
@@ -1252,6 +1274,24 @@ impl RayTracingDescriptorSets {
             VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             10,
             &write_material_buffer_info);
+        let write_material_description_buffer_info = VkDescriptorBufferInfo {
+            buffer: material_description_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: material_description_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_material_description_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            11,
+            &write_material_description_buffer_info);
+        let write_tangent_buffer_info = VkDescriptorBufferInfo {
+            buffer: tangent_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: tangent_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_tangent_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            12,
+            &write_tangent_buffer_info);
         let write_descriptor_sets = vec![
             write_acceleration_structure,
             write_image,
@@ -1264,6 +1304,8 @@ impl RayTracingDescriptorSets {
             write_texture_images,
             write_sphere_buffer,
             write_material_buffer,
+            write_material_description_buffer,
+            write_tangent_buffer,
         ];
         vkUpdateDescriptorSets(device.handle(), 
             write_descriptor_sets.len() as u32, 
@@ -1284,6 +1326,8 @@ impl RayTracingDescriptorSets {
             textures,
             sphere_storage_buffer: Arc::clone(sphere_storage_buffer),
             material_storage_buffer: Arc::clone(material_storage_buffer),
+            material_description_storage_buffer: Arc::clone(material_description_storage_buffer),
+            tangent_storage_buffer: Arc::clone(tangent_storage_buffer),
             descriptor_pool,
             descriptor_set,
         };
