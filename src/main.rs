@@ -6,12 +6,13 @@ use kaldera::ffi::xcb::*;
 use kaldera::vk::*;
 use kaldera::base::*;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 const WIDTH: usize = 1600;
 const HEIGHT: usize = 900;
 
 struct Context {
-    camera: Arc<Mutex<OrbitalCamera>>,
+    camera: Arc<Mutex<dyn Camera>>,
     graphics_render: Arc<GraphicsRender>,
     uniform_buffer: Arc<UniformBuffer>,
     device_queues: Arc<DeviceQueues>,
@@ -37,11 +38,16 @@ fn main() {
     // render loop
     let interpreter = XcbInputInterpreter::new(&window);
     let mut camera = context.camera.lock().unwrap();
+    let mut instant = Instant::now();
     loop {
-        if let Some(event) = interpreter.next() {
-            camera.apply(event);
+        let delta_time = instant.elapsed().as_secs_f32().max(0.00001);
+        instant = Instant::now();
+        if let Some(events) = interpreter.next() {
+            for event in events {
+                camera.apply(event, delta_time);
+            }
         }
-        camera.update(0.001);
+        camera.update(delta_time);
         let model = RayTracingUniformBufferModel {
             view_inverse: camera.view_inverse(),
             proj_inverse: camera.projection_inverse(),
@@ -66,7 +72,7 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
     let scene_asset = SceneAsset::new().unwrap();
     let scene = SceneBuilder::new(&scene_asset)
         .build(&command_pool);
-    let camera = OrbitalCamera::new(WIDTH as f32, HEIGHT as f32);
+    let camera = FreeLookCamera::new(WIDTH as f32, HEIGHT as f32);
     let uniform_buffer_model = RayTracingUniformBufferModel {
         view_inverse: camera.view_inverse(),
         proj_inverse: camera.projection_inverse(),

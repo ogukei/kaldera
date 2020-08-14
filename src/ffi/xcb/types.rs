@@ -1,6 +1,6 @@
 
 #![allow(dead_code)]
-#![allow(non_camel_case_types, non_snake_case)]
+#![allow(non_camel_case_types, non_snake_case, non_upper_case_globals)]
 
 use libc::{c_void, c_int, c_char, c_uint};
 
@@ -12,6 +12,7 @@ pub type xcb_atom_t = u32;
 pub type xcb_timestamp_t = u32;
 pub type xcb_button_t = u8;
 pub type xcb_keycode_t = u8;
+pub type xcb_keysym_t = u32;
 
 pub const XCB_COPY_FROM_PARENT: u64 = 0;
 // @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
@@ -24,9 +25,6 @@ pub const XCB_CONFIGURE_NOTIFY: u8 = 22;
 
 #[repr(C)]
 pub struct xcb_connection_t { _private: [u8; 0] }
-
-#[repr(C)]
-pub struct xcb_setup_t { _private: [u8; 0] }
 
 // @see https://xcb.freedesktop.org/manual/structxcb__screen__t.html
 #[repr(C)]
@@ -287,6 +285,57 @@ pub struct xcb_configure_notify_event_t {
     pub pad1: u8,
 }
 
+// @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
+#[repr(C)]
+pub struct xcb_setup_t {
+    pub status: u8,
+    pub pad0: u8,
+    pub protocol_major_version: u16,
+    pub protocol_minor_version: u16,
+    pub length: u16,
+    pub release_number: u32,
+    pub resource_id_base: u32,
+    pub resource_id_mask: u32,
+    pub motion_buffer_size: u32,
+    pub vendor_len: u16,
+    pub maximum_request_length: u16,
+    pub roots_len: u8,
+    pub pixmap_formats_len: u8,
+    pub image_byte_order: u8,
+    pub bitmap_format_bit_order: u8,
+    pub bitmap_format_scanline_unit: u8,
+    pub bitmap_format_scanline_pad: u8,
+    pub min_keycode: xcb_keycode_t,
+    pub max_keycode: xcb_keycode_t,
+    pub pad1: [u8; 4],
+}
+
+// @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
+#[repr(C)]
+pub struct xcb_get_keyboard_mapping_cookie_t {
+    pub sequence: c_uint,
+}
+
+// @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
+#[repr(C)]
+pub struct xcb_get_keyboard_mapping_request_t {
+    pub major_opcode: u8,
+    pub pad0: u8,
+    pub length: u16,
+    pub first_keycode: xcb_keycode_t,
+    pub count: u8,
+}
+
+// @see http://manpages.ubuntu.com/manpages/bionic/man3/xcb_get_keyboard_mapping.3.html
+#[repr(C)]
+pub struct xcb_get_keyboard_mapping_reply_t {
+    pub response_type: u8,
+    pub keysyms_per_keycode: u8,
+    pub sequence: u16,
+    pub length: u32,
+    pub pad0: [u8; 24],
+}
+
 #[link(name = "xcb")]
 extern "C" {
     // @see https://github.com/freedesktop/xcb-libxcb/blob/ee9dfc9a7658e7fe75d27483bb5ed1ba4d1e2c86/src/xcb.h#L567
@@ -354,4 +403,138 @@ extern "C" {
     pub fn xcb_poll_for_event(
         c: *mut xcb_connection_t,
     ) -> *mut xcb_generic_event_t;
+    // @see http://manpages.ubuntu.com/manpages/bionic/man3/xcb_get_keyboard_mapping.3.html
+    pub fn xcb_get_keyboard_mapping(
+        c: *mut xcb_connection_t,
+        first_keycode: xcb_keycode_t,
+        count: u8,
+    ) -> xcb_get_keyboard_mapping_cookie_t;
+    // @see http://manpages.ubuntu.com/manpages/bionic/man3/xcb_get_keyboard_mapping.3.html
+    pub fn xcb_get_keyboard_mapping_reply(
+        c: *mut xcb_connection_t,
+        cookie: xcb_get_keyboard_mapping_cookie_t, 
+        err: *mut *mut c_void,
+    ) -> *mut xcb_get_keyboard_mapping_reply_t;
+    // @see http://manpages.ubuntu.com/manpages/bionic/man3/xcb_get_keyboard_mapping.3.html
+    pub fn xcb_get_keyboard_mapping_keysyms(
+        reply: *mut xcb_get_keyboard_mapping_reply_t,
+    ) -> *mut xcb_keysym_t;
+    // @see http://manpages.ubuntu.com/manpages/bionic/man3/xcb_get_keyboard_mapping.3.html
+    pub fn xcb_get_keyboard_mapping_keysyms_length(
+        reply: *mut xcb_get_keyboard_mapping_reply_t,
+    ) -> libc::c_int;
 }
+
+// @see https://www.cl.cam.ac.uk/~mgk25/ucs/keysymdef.h
+pub const XK_space: xcb_keysym_t = 0x0020;
+pub const XK_exclam: xcb_keysym_t = 0x0021;
+pub const XK_quotedbl: xcb_keysym_t = 0x0022;
+pub const XK_numbersign: xcb_keysym_t = 0x0023;
+pub const XK_dollar: xcb_keysym_t = 0x0024;
+pub const XK_percent: xcb_keysym_t = 0x0025;
+pub const XK_ampersand: xcb_keysym_t = 0x0026;
+pub const XK_apostrophe: xcb_keysym_t = 0x0027;
+pub const XK_quoteright: xcb_keysym_t = 0x0027;
+pub const XK_parenleft: xcb_keysym_t = 0x0028;
+pub const XK_parenright: xcb_keysym_t = 0x0029;
+pub const XK_asterisk: xcb_keysym_t = 0x002a;
+pub const XK_plus: xcb_keysym_t = 0x002b;
+pub const XK_comma: xcb_keysym_t = 0x002c;
+pub const XK_minus: xcb_keysym_t = 0x002d;
+pub const XK_period: xcb_keysym_t = 0x002e;
+pub const XK_slash: xcb_keysym_t = 0x002f;
+pub const XK_0: xcb_keysym_t = 0x0030;
+pub const XK_1: xcb_keysym_t = 0x0031;
+pub const XK_2: xcb_keysym_t = 0x0032;
+pub const XK_3: xcb_keysym_t = 0x0033;
+pub const XK_4: xcb_keysym_t = 0x0034;
+pub const XK_5: xcb_keysym_t = 0x0035;
+pub const XK_6: xcb_keysym_t = 0x0036;
+pub const XK_7: xcb_keysym_t = 0x0037;
+pub const XK_8: xcb_keysym_t = 0x0038;
+pub const XK_9: xcb_keysym_t = 0x0039;
+pub const XK_colon: xcb_keysym_t = 0x003a;
+pub const XK_semicolon: xcb_keysym_t = 0x003b;
+pub const XK_less: xcb_keysym_t = 0x003c;
+pub const XK_equal: xcb_keysym_t = 0x003d;
+pub const XK_greater: xcb_keysym_t = 0x003e;
+pub const XK_question: xcb_keysym_t = 0x003f;
+pub const XK_at: xcb_keysym_t = 0x0040;
+pub const XK_A: xcb_keysym_t = 0x0041;
+pub const XK_B: xcb_keysym_t = 0x0042;
+pub const XK_C: xcb_keysym_t = 0x0043;
+pub const XK_D: xcb_keysym_t = 0x0044;
+pub const XK_E: xcb_keysym_t = 0x0045;
+pub const XK_F: xcb_keysym_t = 0x0046;
+pub const XK_G: xcb_keysym_t = 0x0047;
+pub const XK_H: xcb_keysym_t = 0x0048;
+pub const XK_I: xcb_keysym_t = 0x0049;
+pub const XK_J: xcb_keysym_t = 0x004a;
+pub const XK_K: xcb_keysym_t = 0x004b;
+pub const XK_L: xcb_keysym_t = 0x004c;
+pub const XK_M: xcb_keysym_t = 0x004d;
+pub const XK_N: xcb_keysym_t = 0x004e;
+pub const XK_O: xcb_keysym_t = 0x004f;
+pub const XK_P: xcb_keysym_t = 0x0050;
+pub const XK_Q: xcb_keysym_t = 0x0051;
+pub const XK_R: xcb_keysym_t = 0x0052;
+pub const XK_S: xcb_keysym_t = 0x0053;
+pub const XK_T: xcb_keysym_t = 0x0054;
+pub const XK_U: xcb_keysym_t = 0x0055;
+pub const XK_V: xcb_keysym_t = 0x0056;
+pub const XK_W: xcb_keysym_t = 0x0057;
+pub const XK_X: xcb_keysym_t = 0x0058;
+pub const XK_Y: xcb_keysym_t = 0x0059;
+pub const XK_Z: xcb_keysym_t = 0x005a;
+pub const XK_bracketleft: xcb_keysym_t = 0x005b;
+pub const XK_backslash: xcb_keysym_t = 0x005c;
+pub const XK_bracketright: xcb_keysym_t = 0x005d;
+pub const XK_asciicircum: xcb_keysym_t = 0x005e;
+pub const XK_underscore: xcb_keysym_t = 0x005f;
+pub const XK_grave: xcb_keysym_t = 0x0060;
+pub const XK_quoteleft: xcb_keysym_t = 0x0060;
+pub const XK_a: xcb_keysym_t = 0x0061;
+pub const XK_b: xcb_keysym_t = 0x0062;
+pub const XK_c: xcb_keysym_t = 0x0063;
+pub const XK_d: xcb_keysym_t = 0x0064;
+pub const XK_e: xcb_keysym_t = 0x0065;
+pub const XK_f: xcb_keysym_t = 0x0066;
+pub const XK_g: xcb_keysym_t = 0x0067;
+pub const XK_h: xcb_keysym_t = 0x0068;
+pub const XK_i: xcb_keysym_t = 0x0069;
+pub const XK_j: xcb_keysym_t = 0x006a;
+pub const XK_k: xcb_keysym_t = 0x006b;
+pub const XK_l: xcb_keysym_t = 0x006c;
+pub const XK_m: xcb_keysym_t = 0x006d;
+pub const XK_n: xcb_keysym_t = 0x006e;
+pub const XK_o: xcb_keysym_t = 0x006f;
+pub const XK_p: xcb_keysym_t = 0x0070;
+pub const XK_q: xcb_keysym_t = 0x0071;
+pub const XK_r: xcb_keysym_t = 0x0072;
+pub const XK_s: xcb_keysym_t = 0x0073;
+pub const XK_t: xcb_keysym_t = 0x0074;
+pub const XK_u: xcb_keysym_t = 0x0075;
+pub const XK_v: xcb_keysym_t = 0x0076;
+pub const XK_w: xcb_keysym_t = 0x0077;
+pub const XK_x: xcb_keysym_t = 0x0078;
+pub const XK_y: xcb_keysym_t = 0x0079;
+pub const XK_z: xcb_keysym_t = 0x007a;
+pub const XK_braceleft: xcb_keysym_t = 0x007b;
+pub const XK_bar: xcb_keysym_t = 0x007c;
+pub const XK_braceright: xcb_keysym_t = 0x007d;
+pub const XK_asciitilde: xcb_keysym_t = 0x007e;
+
+pub const XK_Shift_L: xcb_keysym_t = 0xffe1;
+pub const XK_Shift_R: xcb_keysym_t = 0xffe2;
+pub const XK_Control_L: xcb_keysym_t = 0xffe3;
+pub const XK_Control_R: xcb_keysym_t = 0xffe4;
+pub const XK_Caps_Lock: xcb_keysym_t = 0xffe5;
+pub const XK_Shift_Lock: xcb_keysym_t = 0xffe6;
+pub const XK_Meta_L: xcb_keysym_t = 0xffe7;
+pub const XK_Meta_R: xcb_keysym_t = 0xffe8;
+pub const XK_Alt_L: xcb_keysym_t = 0xffe9;
+pub const XK_Alt_R: xcb_keysym_t = 0xffea;
+pub const XK_Super_L: xcb_keysym_t = 0xffeb;
+pub const XK_Super_R: xcb_keysym_t = 0xffec;
+pub const XK_Hyper_L: xcb_keysym_t = 0xffed;
+pub const XK_Hyper_R: xcb_keysym_t = 0xffee;
