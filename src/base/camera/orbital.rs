@@ -4,6 +4,7 @@ use nalgebra_glm as glm;
 
 use crate::vk::{Mat4};
 use crate::cores::InputEvent;
+use super::camera::Camera;
 
 pub struct OrbitalCamera {
     quat: glm::Quat,
@@ -34,31 +35,34 @@ impl OrbitalCamera {
         }
     }
 
-    pub fn view_inverse(&self) -> Mat4 {
+    fn rotate(&mut self, x: f32, y: f32, delta_time: f32) {
+        self.rotation_x += (x / 400.0) * glm::pi::<f32>();
+        self.rotation_y += (y / 400.0) * glm::pi::<f32>();
+        self.quat_target = orbital_quat(self.rotation_x, self.rotation_y);
+    }
+}
+
+impl Camera for OrbitalCamera {
+    fn view_inverse(&self) -> Mat4 {
         self.inv_view.into()
     }
 
-    pub fn projection_inverse(&self) -> Mat4 {
+    fn projection_inverse(&self) -> Mat4 {
         self.inv_proj.into()
     }
 
-    pub fn apply(&mut self, input: InputEvent) {
+    fn apply(&mut self, input: InputEvent, delta_time: f32) {
         match input {
-            InputEvent::MoveDelta(x, y) => self.rotate(x, y),
+            InputEvent::MoveDelta(x, y) => self.rotate(x, y, delta_time),
+            InputEvent::Key(event) => (),
         }
     }
 
-    pub fn update(&mut self, delta_time: f32) {
+    fn update(&mut self, delta_time: f32) {
         // TODO(ogukei): adjust speed by over time
         self.quat = glm::quat_slerp(&self.quat, &self.quat_target, 0.15);
         let view = view(&self.quat, self.distance);
         self.inv_view = glm::inverse(&view);
-    }
-
-    fn rotate(&mut self, x: f32, y: f32) {
-        self.rotation_x += (x / 400.0) * glm::pi::<f32>();
-        self.rotation_y += (y / 400.0) * glm::pi::<f32>();
-        self.quat_target = orbital_quat(self.rotation_x, self.rotation_y);
     }
 }
 

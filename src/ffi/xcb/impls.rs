@@ -6,6 +6,7 @@ use std::sync::Arc;
 use libc::{c_void, c_int};
 use std::ptr;
 use std::ffi::CString;
+use std::collections::HashMap;
 
 pub struct XcbConnection {
     handle: *mut xcb_connection_t,
@@ -42,6 +43,10 @@ impl XcbConnection {
     #[inline]
     pub fn handle(&self) -> *mut xcb_connection_t {
         self.handle
+    }
+
+    pub fn generate_keymap(&self) -> Option<Arc<XcbKeymap>> {
+        XcbKeymap::new(self)
     }
 }
 
@@ -152,6 +157,97 @@ impl XcbWindow {
                 events.push(event);
             }
         }
+    }
+}
+
+pub enum XcbKey {
+    A, B, C, D, E, F, G, H, I, J, K, L, M, N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+    ShiftLeft,
+    ControlLeft,
+}
+
+impl XcbKey {
+    fn symbol(&self) -> xcb_keysym_t {
+        match &self {
+            Self::A => XK_a,
+            Self::B => XK_b,
+            Self::C => XK_c,
+            Self::D => XK_d,
+            Self::E => XK_e,
+            Self::F => XK_f,
+            Self::G => XK_g,
+            Self::H => XK_h,
+            Self::I => XK_i,
+            Self::J => XK_j,
+            Self::K => XK_k,
+            Self::L => XK_l,
+            Self::M => XK_m,
+            Self::N => XK_n,
+            Self::O => XK_o,
+            Self::P => XK_p,
+            Self::Q => XK_q,
+            Self::R => XK_r,
+            Self::S => XK_s,
+            Self::T => XK_t,
+            Self::U => XK_u,
+            Self::V => XK_v,
+            Self::W => XK_w,
+            Self::X => XK_x,
+            Self::Y => XK_y,
+            Self::Z => XK_z,
+            Self::ShiftLeft => XK_Shift_L,
+            Self::ControlLeft => XK_Control_L,
+        }
+    }
+}
+
+pub struct XcbKeymap {
+    symbol_to_code: HashMap<xcb_keysym_t, xcb_keycode_t>,
+}
+
+impl XcbKeymap {
+    fn new(connection: &XcbConnection) -> Option<Arc<Self>> {
+        unsafe {
+            let conn = connection.handle();
+            let setup = xcb_get_setup(conn).as_ref()?;
+            // gets keyboard_mapping
+            let code_offset = setup.min_keycode as isize;
+            let code_count = (setup.max_keycode as isize) - code_offset + 1;
+            let cookie = xcb_get_keyboard_mapping(conn,
+                code_offset as xcb_keycode_t, 
+                code_count as u8);
+            let reply = xcb_get_keyboard_mapping_reply(conn, cookie, std::ptr::null_mut());
+            // iterate through mapping and store symbol and code pairs
+            let mut symbol_to_code: HashMap<xcb_keysym_t, xcb_keycode_t> = HashMap::new();
+            if let Some(keyboard_mapping) = reply.as_ref() {
+                let syms_per_code = keyboard_mapping.keysyms_per_keycode as isize;
+                let syms = xcb_get_keyboard_mapping_keysyms(reply);
+                for i_code_base in 0..code_count {
+                    let syms = syms.offset(i_code_base * syms_per_code);
+                    let code = (i_code_base + code_offset) as xcb_keycode_t;
+                    for i_sym in 0..syms_per_code {
+                        let symbol = syms.offset(i_sym).as_ref().unwrap();
+                        let symbol = *symbol;
+                        if symbol == 0 {
+                            break
+                        }
+                        if symbol == XK_Super_L || symbol == XK_Super_R {
+                            break
+                        }
+                        symbol_to_code.insert(symbol, code);
+                    }
+                }
+            }
+            libc::free(reply as *mut c_void);
+            let keymap = Self {
+                symbol_to_code,
+            };
+            Some(Arc::new(keymap))
+        }
+    }
+
+    pub fn code_of_key(&self, key: XcbKey) -> Option<xcb_keycode_t> {
+        self.symbol_to_code.get(&key.symbol()).copied()
     }
 }
 
