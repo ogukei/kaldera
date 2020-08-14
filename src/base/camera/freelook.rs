@@ -7,6 +7,9 @@ use crate::vk::{Mat4};
 use crate::cores::{InputEvent, InputKeyEvent};
 use super::camera::Camera;
 
+// uses right-handed coordinate system, that is the same as glTF 2.0. 
+// @see https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#coordinate-system-and-units
+
 pub struct FreeLookCamera {
     inv_view: glm::Mat4,
     inv_proj: glm::Mat4,
@@ -51,8 +54,8 @@ impl FreeLookCamera {
     ) {
         let shift_modifier = if is_shift { 1.5 } else { 1.0 };
         let control_modifier = if is_control { 0.25 } else { 1.0 };
-        let speed = 25.0 * shift_modifier * control_modifier;
-        let forward = glm::vec3(0.0, 0.0, 1.0);
+        let speed = 15.0 * shift_modifier * control_modifier;
+        let forward = glm::vec3(0.0, 0.0, -1.0);
         let right = glm::vec3(1.0, 0.0, 0.0);
         let qi = glm::quat_inverse(&self.quat_target);
         let forward = glm::quat_rotate_vec3(&qi, &forward) * y * delta_time * speed;
@@ -82,7 +85,8 @@ impl Camera for FreeLookCamera {
         let a = 0.6;
         self.position_smooth = glm::lerp_vec(&self.position_smooth, &self.position_target, &glm::vec3(a, a, a));
         self.quat_smooth = glm::quat_slerp(&self.quat_smooth, &self.quat_target, a);
-        let view = glm::quat_to_mat4(&self.quat_smooth) * glm::translation(&self.position_smooth);
+        let translate = self.position_smooth * -1.0;
+        let view = glm::quat_to_mat4(&self.quat_smooth) * glm::translation(&translate);
         self.inv_view = glm::inverse(&view);
     }
 }
