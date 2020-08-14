@@ -91,8 +91,8 @@ impl XcbInputInterpreter {
         }
         let forward = 1.0 * (if state.keys[self.key_codes.w as usize] { 1.0 } else { 0.0 });
         let backward = -1.0 * (if state.keys[self.key_codes.s as usize] { 1.0 } else { 0.0 });
-        let right = 1.0 * (if state.keys[self.key_codes.a as usize] { 1.0 } else { 0.0 });
-        let left = -1.0 * (if state.keys[self.key_codes.d as usize] { 1.0 } else { 0.0 });
+        let right = 1.0 * (if state.keys[self.key_codes.d as usize] { 1.0 } else { 0.0 });
+        let left = -1.0 * (if state.keys[self.key_codes.a as usize] { 1.0 } else { 0.0 });
         let x = right + left;
         let y = forward + backward;
         if x == 0.0 && y == 0.0 {
