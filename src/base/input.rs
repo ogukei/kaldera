@@ -28,6 +28,8 @@ struct KeyCodes {
     pub a: u8,
     pub s: u8,
     pub d: u8,
+    pub e: u8,
+    pub q: u8,
     pub shift_left: u8,
     pub control_left: u8,
 }
@@ -39,6 +41,8 @@ impl KeyCodes {
             a: keymap.code_of_key(XcbKey::A).unwrap_or(0),
             s: keymap.code_of_key(XcbKey::S).unwrap_or(0),
             d: keymap.code_of_key(XcbKey::D).unwrap_or(0),
+            e: keymap.code_of_key(XcbKey::E).unwrap_or(0),
+            q: keymap.code_of_key(XcbKey::Q).unwrap_or(0),
             shift_left: keymap.code_of_key(XcbKey::ShiftLeft).unwrap_or(0),
             control_left: keymap.code_of_key(XcbKey::ControlLeft).unwrap_or(0),
         }
@@ -93,14 +97,17 @@ impl XcbInputInterpreter {
         let backward = -1.0 * (if state.keys[self.key_codes.s as usize] { 1.0 } else { 0.0 });
         let right = 1.0 * (if state.keys[self.key_codes.d as usize] { 1.0 } else { 0.0 });
         let left = -1.0 * (if state.keys[self.key_codes.a as usize] { 1.0 } else { 0.0 });
+        let upward = 1.0 * (if state.keys[self.key_codes.e as usize] { 1.0 } else { 0.0 });
+        let downward = -1.0 * (if state.keys[self.key_codes.q as usize] { 1.0 } else { 0.0 });
         let x = right + left;
         let y = forward + backward;
-        if x == 0.0 && y == 0.0 {
+        let z = upward + downward;
+        if x == 0.0 && y == 0.0 && z == 0.0 {
             None
         } else {
             let is_shift = state.keys[self.key_codes.shift_left as usize];
             let is_control = state.keys[self.key_codes.control_left as usize];
-            let event = InputKeyEvent { x, y, is_shift, is_control };
+            let event = InputKeyEvent { x, y, z, is_shift, is_control };
             Some(InputEvent::Key(event))
         }
     }

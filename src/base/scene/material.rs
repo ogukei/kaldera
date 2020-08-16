@@ -22,51 +22,64 @@ use super::mesh::*;
 
 pub struct Material<'a> {
     material: gltf::material::Material<'a>,
-    color_image: &'a gltf::image::Data,
-    color_pixels: MaterialImagePixels<'a>,
-    normal_image: Option<&'a gltf::image::Data>,
-    normal_pixels: Option<MaterialImagePixels<'a>>,
+    color_image_pixels: Option<(&'a gltf::image::Data, MaterialImagePixels<'a>)>,
+    normal_image_pixels: Option<(&'a gltf::image::Data, MaterialImagePixels<'a>)>,
 }
 
 impl<'a> Material<'a> {
     pub fn new(material: gltf::material::Material<'a>, images: &'a Vec<gltf::image::Data>) -> Self {
-        let model = material.pbr_metallic_roughness();
-        let color = model.base_color_texture().unwrap();
-        // color
-        let color_image_index = color.texture().source().index();
-        let color_image = images.get(color_image_index).unwrap();
-        let color_pixels = MaterialImagePixels::new(color_image).unwrap();
-        // normal
-        let normal = material.normal_texture();
-        let normal_image_index = normal
-            .map(|v| v.texture().source().index());
-        let normal_image = normal_image_index
-            .map(|index| images.get(index).unwrap());
-        let normal_pixels = normal_image
-            .map(|image| MaterialImagePixels::new(image).unwrap());
+        let color_image_pixels = Self::color_info(&material, images);
+        let normal_image_pixels = Self::normal_info(&material, images);
         Self {
             material,
-            color_image,
-            color_pixels,
-            normal_image,
-            normal_pixels,
+            color_image_pixels,
+            normal_image_pixels,
         }
     }
 
-    pub fn color_image(&self) -> &'a gltf::image::Data {
-        self.color_image
+    fn color_info(
+        material: &gltf::material::Material<'a>, 
+        images: &'a Vec<gltf::image::Data>
+    ) -> Option<(&'a gltf::image::Data, MaterialImagePixels<'a>)> 
+    {
+        let model = material.pbr_metallic_roughness();
+        let color = model.base_color_texture()?;
+        let image_index = color.texture().source().index();
+        let image = images.get(image_index)?;
+        let pixels = MaterialImagePixels::new(image)?;
+        Some((image, pixels))
     }
 
-    pub fn color_pixels(&self) -> &MaterialImagePixels<'a> {
-        &self.color_pixels
+    fn normal_info(
+        material: &gltf::material::Material<'a>, 
+        images: &'a Vec<gltf::image::Data>
+    ) -> Option<(&'a gltf::image::Data, MaterialImagePixels<'a>)> 
+    {
+        let normal = material.normal_texture()?;
+        let image_index = normal.texture().source().index();
+        let image = images.get(image_index)?;
+        let pixels = MaterialImagePixels::new(image)?;
+        Some((image, pixels))
+    }
+
+    pub fn color_image(&self) -> Option<&'a gltf::image::Data> {
+        self.color_image_pixels.as_ref()
+            .map(|v| v.0)
+    }
+
+    pub fn color_pixels(&self) -> Option<&MaterialImagePixels<'a>> {
+        self.color_image_pixels.as_ref()
+            .map(|v| &v.1)
     }
 
     pub fn normal_image(&self) -> Option<&'a gltf::image::Data> {
-        self.normal_image
+        self.normal_image_pixels.as_ref()
+            .map(|v| v.0)
     }
 
     pub fn normal_pixels(&self) -> Option<&MaterialImagePixels<'a>> {
-        self.normal_pixels.as_ref()
+        self.normal_image_pixels.as_ref()
+            .map(|v| &v.1)
     }
 }
 
@@ -113,16 +126,26 @@ pub struct SceneMaterialDescription {
 pub struct MaterialDescriptionsTextures {
     pub descriptions: Vec<SceneMaterialDescription>,
     pub textures: Vec<Arc<Texture>>,
+    pub materials: Vec<Arc<SceneMeshMaterial>>,
 }
 
 impl MaterialDescriptionsTextures {
-    pub fn new(materials: &[Arc<SceneMeshMaterial>]) -> Self {
+    pub fn new(materials: &[Material], command_pool: &Arc<CommandPool>) -> Self {
+        let materials: Vec<_> = materials.iter()
+            .map(|v| SceneMeshMaterial::new(v, command_pool))
+            .collect();
         let mut descriptions: Vec<SceneMaterialDescription> = vec![];
         let mut textures: Vec<Arc<Texture>> = vec![];
-        for material in materials {
-            let color_texture_index = textures.len() as i32;
-            let color_texture = material.color_texture();
-            textures.push(Arc::clone(color_texture));
+        for material in materials.iter() {
+            // color
+            let color_texture_index: i32;
+            if let Some(color_texture) = material.color_texture() {
+                color_texture_index = textures.len() as i32;
+                textures.push(Arc::clone(color_texture));
+            } else {
+                color_texture_index = -1;
+            }
+            // normal
             let normal_texture_index: i32;
             if let Some(normal_texture) = material.normal_texture() {
                 normal_texture_index = textures.len() as i32;
@@ -139,6 +162,7 @@ impl MaterialDescriptionsTextures {
         Self {
             descriptions,
             textures,
+            materials,
         }
     }
 }

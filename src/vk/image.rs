@@ -558,12 +558,11 @@ impl TextureImage {
     }
 
     unsafe fn init_mipmap(device: &Arc<Device>, extent: VkExtent3D, format: VkFormat) -> Result<Arc<Self>> {
-        fn log2(v: u32) -> Option<u32> {
-            if v.count_ones() == 1 { Some(v.trailing_zeros()) } else { None }
-        }
-        let log2 = log2(extent.width.max(extent.height))
-            .ok_or_else(|| ErrorCode::ImageFormatInvalid)?;
-        let mip_levels = log2 + 1;
+        let mip_levels = extent.width
+            .max(extent.height)
+            .next_power_of_two()
+            .trailing_zeros()
+            .max(1);
         // image
         let mut image_handle = MaybeUninit::<VkImage>::zeroed();
         {

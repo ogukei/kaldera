@@ -13,6 +13,8 @@ pub type xcb_timestamp_t = u32;
 pub type xcb_button_t = u8;
 pub type xcb_keycode_t = u8;
 pub type xcb_keysym_t = u32;
+pub type xcb_font_t = u32;
+pub type xcb_cursor_t = u32;
 
 pub const XCB_COPY_FROM_PARENT: u64 = 0;
 // @see https://xcb.freedesktop.org/manual/xproto_8h_source.html
@@ -423,6 +425,35 @@ extern "C" {
     pub fn xcb_get_keyboard_mapping_keysyms_length(
         reply: *mut xcb_get_keyboard_mapping_reply_t,
     ) -> libc::c_int;
+    // @see https://manpages.debian.org/testing/libxcb-doc/xcb_open_font.3.en.html
+    pub fn xcb_open_font(
+        conn: *mut xcb_connection_t, 
+        fid: xcb_font_t, 
+        name_len: u16, 
+        name: *const c_char,
+    ) -> xcb_void_cookie_t;
+    // @see http://manpages.ubuntu.com/manpages/bionic/man3/xcb_create_glyph_cursor.3.html
+    pub fn xcb_create_glyph_cursor(
+        conn: *mut xcb_connection_t, 
+        cid: xcb_cursor_t,
+        source_font: xcb_font_t, 
+        mask_font: xcb_font_t, 
+        source_char: u16,
+        mask_char: u16,
+        fore_red: u16,
+        fore_green: u16,
+        fore_blue: u16,
+        back_red: u16,
+        back_green: u16,
+        back_blue: u16,
+    ) -> xcb_void_cookie_t;
+    // @see http://manpages.ubuntu.com/manpages/xenial/man3/xcb_change_window_attributes.3.html
+    pub fn xcb_change_window_attributes(
+        conn: *mut xcb_connection_t,
+        window: xcb_window_t,
+        value_mask: u32,
+        value_list: *const u32,
+    ) -> xcb_void_cookie_t;
 }
 
 // @see https://www.cl.cam.ac.uk/~mgk25/ucs/keysymdef.h

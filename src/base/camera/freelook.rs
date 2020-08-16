@@ -27,7 +27,7 @@ impl FreeLookCamera {
         let inv_proj = glm::inverse(&perspective);
         let view: glm::Mat4 = glm::identity();
         let quat = orbital_quat(0.0, 0.0);
-        let position = glm::vec3(0.0, 0.0, 0.0);
+        let position = glm::vec3(9.0, 2.0, 8.0);
         Self {
             inv_view: glm::inverse(&view),
             inv_proj: inv_proj,
@@ -49,18 +49,20 @@ impl FreeLookCamera {
     }
 
     fn forward(&mut self, 
-        InputKeyEvent { x, y, is_shift, is_control }: InputKeyEvent, 
+        InputKeyEvent { x, y, z, is_shift, is_control }: InputKeyEvent, 
         delta_time: f32
     ) {
-        let shift_modifier = if is_shift { 1.5 } else { 1.0 };
+        let shift_modifier = if is_shift { 2.0 } else { 1.0 };
         let control_modifier = if is_control { 0.25 } else { 1.0 };
-        let speed = 15.0 * shift_modifier * control_modifier;
+        let speed = 1.5 * shift_modifier * control_modifier;
         let forward = glm::vec3(0.0, 0.0, -1.0);
         let right = glm::vec3(1.0, 0.0, 0.0);
+        let up = glm::vec3(0.0, 1.0, 0.0);
         let qi = glm::quat_inverse(&self.quat_target);
         let forward = glm::quat_rotate_vec3(&qi, &forward) * y * delta_time * speed;
         let right = glm::quat_rotate_vec3(&qi, &right) * x * delta_time * speed;
-        self.position_target += forward + right;
+        let upward = glm::quat_rotate_vec3(&qi, &up) * z * delta_time * speed;
+        self.position_target += forward + right + upward;
     }
 }
 

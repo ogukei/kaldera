@@ -66,10 +66,7 @@ impl Scene {
     fn new(table: &MeshTable, nodes: &[MeshNode], materials: &[Material], command_pool: &Arc<CommandPool>) -> Self {
         let primitives = table.mesh_primitives();
         log_debug!("creating material images");
-        let materials: Vec<_> = materials.iter()
-            .map(|v| SceneMeshMaterial::new(v, command_pool))
-            .collect();
-        let descriptions_textures = MaterialDescriptionsTextures::new(&materials);
+        let descriptions_textures = MaterialDescriptionsTextures::new(materials, command_pool);
         log_debug!("creating material images complete");
         log_debug!("creating staging buffers");
         let staging_buffers = SceneStagingBuffers::new(command_pool, primitives, &descriptions_textures.descriptions);
@@ -106,9 +103,9 @@ impl Scene {
         let procedural = SceneProceduralGeometry::new(&aabbs, &spheres, &sphere_materials, command_pool).unwrap();
         log_debug!("building blas procedurals complete");
         log_debug!("building tlas");
-        let node_scale: f32 = 5.0;
+        let node_scale: f32 = 1.0;
         let node_scale = glm::scaling(&glm::vec3(node_scale, node_scale, node_scale));
-        let node_translate = glm::translation(&glm::vec3(0.0, -20.0, 0.0));
+        let node_translate = glm::translation(&glm::vec3(0.0, 0.0, 0.0));
         let node_instances = nodes.into_iter()
             .map(|node| {
                 let index = node.primitive().index();
@@ -159,7 +156,7 @@ impl Scene {
             primitives: scene_mesh_primitives,
             staging_buffers,
             top_level_acceleration_structure,
-            materials,
+            materials: descriptions_textures.materials,
             textures: descriptions_textures.textures,
             procedural,
         }

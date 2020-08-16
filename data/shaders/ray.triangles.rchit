@@ -6,6 +6,8 @@
 
 #include "ray.common.glsl"
 #include "ray.common.payload.glsl"
+#include "ray.common.random.glsl"
+#include "ray.common.scatter.glsl"
 
 // https://github.com/nvpro-samples/vk_raytracing_tutorial_KHR/blob/master/ray_tracing__simple/shaders/raytrace.rchit
 // https://github.com/SaschaWillems/Vulkan-Samples/tree/fc55746e485fbaa1aa0ecafd388759e6c6d00bf5/samples/extensions/raytracing_basic
@@ -87,14 +89,23 @@ void main() {
   const vec3 objectNormal = normalize(n0 * barycentrics.x + n1 * barycentrics.y + n2 * barycentrics.z);
   vec3 worldNormal = normalize(vec3(objectNormal * gl_WorldToObjectEXT));
   const vec3 objectGeometricNormal = normalize(cross(v1 - v0, v2 - v0));
-  const vec3 worldGeometricNormal = normalize(vec3(objectGeometricNormal * gl_WorldToObjectEXT));
+  vec3 worldGeometricNormal = normalize(vec3(objectGeometricNormal * gl_WorldToObjectEXT));
+  // incident ray geometric normal
+  if (dot(worldGeometricNormal, gl_WorldRayDirectionEXT) > 0.0) {
+    worldGeometricNormal *= -1.0;
+  }
   // Texture
   const vec2 uv0 = texcoordAt(triangleIndex.x);
   const vec2 uv1 = texcoordAt(triangleIndex.y);
   const vec2 uv2 = texcoordAt(triangleIndex.z);
   const vec2 texcoord0 = uv0 * barycentrics.x + uv1 * barycentrics.y + uv2 * barycentrics.z;
   const MaterialDescription material = materials[nonuniformEXT(desc.materialIndex)];
-  const vec3 textureDiffuse = texture(textures[nonuniformEXT(material.colorTextureIndex)], texcoord0).xyz;
+  vec3 textureDiffuse;
+  if (material.colorTextureIndex >= 0) {
+    textureDiffuse = texture(textures[nonuniformEXT(material.colorTextureIndex)], texcoord0).xyz;
+  } else {
+    textureDiffuse = vec3(1.0);
+  }
   // Normal Mapping
   if (material.normalTextureIndex >= 0) {
     const vec4 t0 = tangentAt(triangleIndex.x);
@@ -108,6 +119,10 @@ void main() {
     const vec3 objectPNormal = normalize(TBN * tangentNormal);
     const vec3 worldPnormal = normalize(vec3(objectPNormal * gl_WorldToObjectEXT));
     worldNormal = worldPnormal;
+  }
+  // double sided back-face should have reversed normals
+  if (dot(worldNormal, worldGeometricNormal) <= 0.0) {
+    worldNormal *= -1.0;
   }
   // Diffuse
   const vec3 light = vec3(lightDiffuse(vec3(0.0f, 5.0f, 0.0f), worldPosition, worldNormal));

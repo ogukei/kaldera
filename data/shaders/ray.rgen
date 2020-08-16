@@ -46,15 +46,11 @@ vec3 diffuse(vec3 origin, vec3 direction) {
 void main() {
   payload.random = randomInit(gl_LaunchIDEXT.y * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.x, 0);
 
-  const uint NUM_SAMPLES = 4;
+  const uint NUM_SAMPLES = 1;
   vec3 hitValues = vec3(0.0);
   for (uint i = 0; i < NUM_SAMPLES; i++) {
-    const bool isJitter = false; //(i != 0);
-    const uint ix = i % 2;
-    const uint iy = i / 2;
-    const float tx = 0.25 * float(ix) - 0.25;
-    const float ty = 0.25 * float(iy) - 0.25;
-    const vec2 pixelCenter = samplePixelCenter(payload.random, isJitter) + vec2(tx, ty);
+    const bool isJitter = false;
+    const vec2 pixelCenter = samplePixelCenter(payload.random, isJitter);
     const vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
     const vec2 d = inUV * 2.0 - 1.0;
 
