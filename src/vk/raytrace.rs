@@ -787,7 +787,8 @@ impl RayTracingGraphicsPipeline {
             let bindings = vec![
                 VkDescriptorSetLayoutBinding::new(
                     VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32,
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
                     0,
                 ),
                 VkDescriptorSetLayoutBinding::new(
@@ -881,6 +882,7 @@ impl RayTracingGraphicsPipeline {
         // Shader Stages
         let raygen_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.rgen.spv")).unwrap();
         let rmiss_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.rmiss.spv")).unwrap();
+        let shadow_rmiss_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.shadow.rmiss.spv")).unwrap();
         let triangles_rchit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.triangles.rchit.spv")).unwrap();
         let triangles_rahit_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.triangles.rahit.spv")).unwrap();
         let procedural_rint_shader_module = ShaderModule::new(device, ShaderModuleSource::from_file("data/shaders/ray.procedural.rint.spv")).unwrap();
@@ -888,10 +890,11 @@ impl RayTracingGraphicsPipeline {
         let shader_entry_point = CString::new("main").unwrap();
         const INDEX_RAYGEN: u32 = 0;
         const INDEX_MISS: u32 = 1;
-        const INDEX_TRIANGLES_CLOSEST_HIT: u32 = 2;
-        const INDEX_TRIANGLES_ANY_HIT: u32 = 3;
-        const INDEX_PROCEDURAL_INTERSECTION: u32 = 4;
-        const INDEX_PROCEDURAL_CLOSEST_HIT: u32 = 5;
+        const INDEX_SHADOW_MISS: u32 = 2;
+        const INDEX_TRIANGLES_CLOSEST_HIT: u32 = 3;
+        const INDEX_TRIANGLES_ANY_HIT: u32 = 4;
+        const INDEX_PROCEDURAL_INTERSECTION: u32 = 5;
+        const INDEX_PROCEDURAL_CLOSEST_HIT: u32 = 6;
         let shader_stages = vec![
             VkPipelineShaderStageCreateInfo {
                 sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -908,6 +911,15 @@ impl RayTracingGraphicsPipeline {
                 flags: 0,
                 stage: VkShaderStageFlagBits::VK_SHADER_STAGE_MISS_BIT_KHR,
                 module: rmiss_shader_module.handle(),
+                pName: shader_entry_point.as_ptr(),
+                pSpecializationInfo: ptr::null(),
+            },
+            VkPipelineShaderStageCreateInfo {
+                sType: VkStructureType::VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                stage: VkShaderStageFlagBits::VK_SHADER_STAGE_MISS_BIT_KHR,
+                module: shadow_rmiss_shader_module.handle(),
                 pName: shader_entry_point.as_ptr(),
                 pSpecializationInfo: ptr::null(),
             },
@@ -972,6 +984,16 @@ impl RayTracingGraphicsPipeline {
             VkRayTracingShaderGroupCreateInfoKHR {
                 sType: VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
                 pNext: ptr::null(),
+                r#type: VkRayTracingShaderGroupTypeKHR::VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+                generalShader: INDEX_SHADOW_MISS,
+                closestHitShader: VK_SHADER_UNUSED_KHR,
+                anyHitShader: VK_SHADER_UNUSED_KHR,
+                intersectionShader: VK_SHADER_UNUSED_KHR,
+                pShaderGroupCaptureReplayHandle: ptr::null(),
+            },
+            VkRayTracingShaderGroupCreateInfoKHR {
+                sType: VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+                pNext: ptr::null(),
                 r#type: VkRayTracingShaderGroupTypeKHR::VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
                 generalShader: VK_SHADER_UNUSED_KHR,
                 closestHitShader: INDEX_TRIANGLES_CLOSEST_HIT,
@@ -996,6 +1018,8 @@ impl RayTracingGraphicsPipeline {
             libraryCount: 0,
             pLibraries: ptr::null(),
         };
+        // allows casting a shadow ray from the closest hit shader
+        let max_recursion_depth = 2;
         let create_info = VkRayTracingPipelineCreateInfoKHR {
             sType: VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR,
             pNext: ptr::null(),
@@ -1004,7 +1028,7 @@ impl RayTracingGraphicsPipeline {
             pStages: shader_stages.as_ptr(),
             groupCount: shader_groups.len() as u32,
             pGroups: shader_groups.as_ptr(),
-            maxRecursionDepth: 1,
+            maxRecursionDepth: max_recursion_depth,
             libraries: libraries,
             pLibraryInterface: ptr::null(),
             layout: pipeline_layout,
@@ -1367,7 +1391,7 @@ impl ShaderBindingTable {
 
     unsafe fn init(command_pool: &Arc<CommandPool>, pipeline: &Arc<RayTracingGraphicsPipeline>) -> Result<Arc<Self>> {
         let device = command_pool.queue().device();
-        let num_shader_groups = 4usize;
+        let num_shader_groups = 5usize;
         let properties = device.physical_device().properties_ray_tracing();
         let table_size = (properties.shaderGroupBaseAlignment as VkDeviceSize) * (num_shader_groups as VkDeviceSize);
         let staging_buffer = DedicatedStagingBuffer::new(command_pool, 
@@ -1399,24 +1423,23 @@ impl ShaderBindingTable {
         });
         // buffer region calculation
         let alignment = properties.shaderGroupBaseAlignment as VkDeviceSize;
-        let handle_size = properties.shaderGroupHandleSize as VkDeviceSize;
         let raygen_entry = VkStridedBufferRegionKHR {
             buffer: staging_buffer.device_buffer_memory().buffer(),
             offset: alignment * 0,
             stride: alignment,
-            size: handle_size,
+            size: table_size,
         };
         let miss_entry = VkStridedBufferRegionKHR {
             buffer: staging_buffer.device_buffer_memory().buffer(),
             offset: alignment * 1,
             stride: alignment,
-            size: handle_size,
+            size: table_size,
         };
         let hit_entry = VkStridedBufferRegionKHR {
             buffer: staging_buffer.device_buffer_memory().buffer(),
-            offset: alignment * 2,
+            offset: alignment * 3,
             stride: alignment,
-            size: handle_size,
+            size: table_size,
         };
         let callable_entry = VkStridedBufferRegionKHR::default();
         let table = Self {

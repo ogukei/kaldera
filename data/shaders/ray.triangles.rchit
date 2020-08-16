@@ -6,6 +6,8 @@
 
 #include "ray.common.glsl"
 #include "ray.common.payload.glsl"
+#include "ray.common.random.glsl"
+#include "ray.common.scatter.glsl"
 
 // https://github.com/nvpro-samples/vk_raytracing_tutorial_KHR/blob/master/ray_tracing__simple/shaders/raytrace.rchit
 // https://github.com/SaschaWillems/Vulkan-Samples/tree/fc55746e485fbaa1aa0ecafd388759e6c6d00bf5/samples/extensions/raytracing_basic
@@ -23,6 +25,9 @@ struct MaterialDescription {
 };
 
 layout(location = 0) rayPayloadInEXT RayPayload payload;
+layout(location = 1) rayPayloadEXT bool isShadowed;
+
+layout(binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(binding = 3) readonly buffer Vertices { float vertices[]; };
 layout(binding = 4) readonly buffer Indices { uint indices[]; };
 layout(binding = 5) readonly buffer Normals { float normals[]; };
@@ -38,7 +43,7 @@ float lightDiffuse(vec3 lightPosition, vec3 position, vec3 normal) {
   // Vector toward the light
   vec3 lDir      = lightPosition - position;
   vec3  L = normalize(lDir);
-  float dotNL = max(dot(normal, L), 0.2);
+  float dotNL = max(dot(normal, L), 0.1);
   return dotNL;
 }
 
@@ -87,14 +92,23 @@ void main() {
   const vec3 objectNormal = normalize(n0 * barycentrics.x + n1 * barycentrics.y + n2 * barycentrics.z);
   vec3 worldNormal = normalize(vec3(objectNormal * gl_WorldToObjectEXT));
   const vec3 objectGeometricNormal = normalize(cross(v1 - v0, v2 - v0));
-  const vec3 worldGeometricNormal = normalize(vec3(objectGeometricNormal * gl_WorldToObjectEXT));
+  vec3 worldGeometricNormal = normalize(vec3(objectGeometricNormal * gl_WorldToObjectEXT));
+  // incident ray geometric normal
+  if (dot(worldGeometricNormal, gl_WorldRayDirectionEXT) > 0.0) {
+    worldGeometricNormal *= -1.0;
+  }
   // Texture
   const vec2 uv0 = texcoordAt(triangleIndex.x);
   const vec2 uv1 = texcoordAt(triangleIndex.y);
   const vec2 uv2 = texcoordAt(triangleIndex.z);
   const vec2 texcoord0 = uv0 * barycentrics.x + uv1 * barycentrics.y + uv2 * barycentrics.z;
   const MaterialDescription material = materials[nonuniformEXT(desc.materialIndex)];
-  const vec3 textureDiffuse = texture(textures[nonuniformEXT(material.colorTextureIndex)], texcoord0).xyz;
+  vec3 textureDiffuse;
+  if (material.colorTextureIndex >= 0) {
+    textureDiffuse = texture(textures[nonuniformEXT(material.colorTextureIndex)], texcoord0).xyz;
+  } else {
+    textureDiffuse = vec3(1.0);
+  }
   // Normal Mapping
   if (material.normalTextureIndex >= 0) {
     const vec4 t0 = tangentAt(triangleIndex.x);
@@ -109,8 +123,25 @@ void main() {
     const vec3 worldPnormal = normalize(vec3(objectPNormal * gl_WorldToObjectEXT));
     worldNormal = worldPnormal;
   }
+  // double sided back-face should have reversed normals
+  if (dot(worldNormal, worldGeometricNormal) <= 0.0) {
+    worldNormal *= -1.0;
+  }
   // Diffuse
-  const vec3 light = vec3(lightDiffuse(vec3(0.0f, 5.0f, 0.0f), worldPosition, worldNormal));
-  const vec3 finalColor = textureDiffuse * light;
+  const vec3 lightPosition = vec3(9.0, 20.0, 8.0);
+  const vec3 L = normalize(lightPosition - worldPosition);
+  const vec3 light = vec3(lightDiffuse(lightPosition, worldPosition, worldNormal));
+  // Shadow
+  isShadowed = true;
+  {
+    const float tMin = 0.001;
+    const float tMax = length(lightPosition - worldPosition);
+    const vec3 origin = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+    const vec3 direction = L;
+    uint flags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+    traceRayEXT(topLevelAS, flags, 0xff, 0, 0, 1, origin, tMin, direction, tMax, 1);
+  }
+  const float attenuation = (isShadowed) ? 0.3 : 1.0;
+  const vec3 finalColor = textureDiffuse * light * attenuation;
   payload.hitValue = finalColor;
 }

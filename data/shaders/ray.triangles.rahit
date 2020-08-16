@@ -73,16 +73,15 @@ void main() {
   const vec3 n2 = normalAt(triangleIndex.z);
   const vec3 objectNormal = normalize(n0 * barycentrics.x + n1 * barycentrics.y + n2 * barycentrics.z);
   const vec3 worldNormal = normalize(vec3(objectNormal * gl_WorldToObjectEXT));
-  if (isBackFace(worldNormal)) {
-    ignoreIntersectionEXT();
-    return;
-  }
   // Texture
   const vec2 uv0 = texcoordAt(triangleIndex.x);
   const vec2 uv1 = texcoordAt(triangleIndex.y);
   const vec2 uv2 = texcoordAt(triangleIndex.z);
   const vec2 texcoord0 = uv0 * barycentrics.x + uv1 * barycentrics.y + uv2 * barycentrics.z;
   const MaterialDescription material = materials[nonuniformEXT(desc.materialIndex)];
+  if (material.colorTextureIndex < 0) {
+    return;
+  }
   const float textureAlpha = texture(textures[nonuniformEXT(material.colorTextureIndex)], texcoord0).a;
   if (textureAlpha < 0.5) {
     ignoreIntersectionEXT();

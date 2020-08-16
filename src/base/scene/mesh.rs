@@ -24,27 +24,29 @@ use super::buffer::*;
 use super::primitive::*;
 
 pub struct SceneMeshMaterial {
-    color_texture: Arc<Texture>,
+    color_texture: Option<Arc<Texture>>,
     normal_texture: Option<Arc<Texture>>,
 }
 
 impl SceneMeshMaterial {
     pub fn new(material: &Material, command_pool: &Arc<CommandPool>) -> Arc<Self> {
-        let color_texture = {
-            let pixels = material.color_pixels().pixels();
-            let data = pixels.as_ptr() as *const c_void;
-            let data_size = pixels.len();
-            let extent = VkExtent3D {
-                width: material.color_image().width,
-                height: material.color_image().height,
-                depth: 1,
-            };
-            let device = command_pool.queue().device();
-            let mipmaps = true;
-            let texture_image = TextureImage::new(device, extent, VkFormat::VK_FORMAT_R8G8B8A8_SRGB, mipmaps).unwrap();
-            let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
-            texture
-        };
+        let color_texture = material.color_pixels()
+            .map(|pixels| {
+                let image = material.color_image().unwrap();
+                let pixels = pixels.pixels();
+                let data = pixels.as_ptr() as *const c_void;
+                let data_size = pixels.len();
+                let extent = VkExtent3D {
+                    width: image.width,
+                    height: image.height,
+                    depth: 1,
+                };
+                let device = command_pool.queue().device();
+                let mipmaps = true;
+                let texture_image = TextureImage::new(device, extent, VkFormat::VK_FORMAT_R8G8B8A8_SRGB, mipmaps).unwrap();
+                let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
+                texture
+            });
         let normal_texture = material.normal_pixels()
             .map(|pixels| {
                 let image = material.normal_image().unwrap();
@@ -69,8 +71,27 @@ impl SceneMeshMaterial {
         Arc::new(mesh_material)
     }
 
-    pub fn color_texture(&self) -> &Arc<Texture> {
-        &self.color_texture
+    pub fn new_placeholder(command_pool: &Arc<CommandPool>) -> Arc<Self> {
+        let extent = VkExtent3D {
+            width: 1,
+            height: 1,
+            depth: 1,
+        };
+        let mut data: Vec<u8> = vec![];
+        data.resize(4, 255u8);
+        let device = command_pool.queue().device();
+        let mipmaps = false;
+        let texture_image = TextureImage::new(device, extent, VkFormat::VK_FORMAT_R8G8B8A8_SRGB, mipmaps).unwrap();
+        let texture = Texture::new(command_pool, &texture_image, data.as_ptr() as *const c_void, data.len()).unwrap();
+        let mesh_material = Self {
+            color_texture: Some(texture),
+            normal_texture: None,
+        };
+        Arc::new(mesh_material)
+    }
+
+    pub fn color_texture(&self) -> Option<&Arc<Texture>> {
+        self.color_texture.as_ref()
     }
 
     pub fn normal_texture(&self) -> Option<&Arc<Texture>> {
