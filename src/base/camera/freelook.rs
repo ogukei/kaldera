@@ -27,7 +27,7 @@ impl FreeLookCamera {
         let inv_proj = glm::inverse(&perspective);
         let view: glm::Mat4 = glm::identity();
         let quat = orbital_quat(0.0, 0.0);
-        let position = glm::vec3(9.0, 2.0, 8.0);
+        let position = glm::vec3(0.0, 0.0, 0.0);
         Self {
             inv_view: glm::inverse(&view),
             inv_proj: inv_proj,

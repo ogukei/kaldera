@@ -25,6 +25,9 @@ struct MaterialDescription {
 };
 
 layout(location = 0) rayPayloadInEXT RayPayload payload;
+layout(location = 1) rayPayloadEXT bool isShadowed;
+
+layout(binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(binding = 3) readonly buffer Vertices { float vertices[]; };
 layout(binding = 4) readonly buffer Indices { uint indices[]; };
 layout(binding = 5) readonly buffer Normals { float normals[]; };
@@ -40,7 +43,7 @@ float lightDiffuse(vec3 lightPosition, vec3 position, vec3 normal) {
   // Vector toward the light
   vec3 lDir      = lightPosition - position;
   vec3  L = normalize(lDir);
-  float dotNL = max(dot(normal, L), 0.2);
+  float dotNL = max(dot(normal, L), 0.1);
   return dotNL;
 }
 
@@ -125,7 +128,20 @@ void main() {
     worldNormal *= -1.0;
   }
   // Diffuse
-  const vec3 light = vec3(lightDiffuse(vec3(0.0f, 5.0f, 0.0f), worldPosition, worldNormal));
-  const vec3 finalColor = textureDiffuse * light;
+  const vec3 lightPosition = vec3(9.0, 20.0, 8.0);
+  const vec3 L = normalize(lightPosition - worldPosition);
+  const vec3 light = vec3(lightDiffuse(lightPosition, worldPosition, worldNormal));
+  // Shadow
+  isShadowed = true;
+  {
+    const float tMin = 0.001;
+    const float tMax = length(lightPosition - worldPosition);
+    const vec3 origin = gl_WorldRayOriginEXT + gl_WorldRayDirectionEXT * gl_HitTEXT;
+    const vec3 direction = L;
+    uint flags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+    traceRayEXT(topLevelAS, flags, 0xff, 0, 0, 1, origin, tMin, direction, tMax, 1);
+  }
+  const float attenuation = (isShadowed) ? 0.3 : 1.0;
+  const vec3 finalColor = textureDiffuse * light * attenuation;
   payload.hitValue = finalColor;
 }
