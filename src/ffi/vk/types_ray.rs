@@ -11,10 +11,16 @@ use super::types_ext::*;
 
 pub type VkAccelerationStructureCreateFlagsKHR = VkFlags;
 pub type VkBuildAccelerationStructureFlagsKHR = VkFlags;
+pub type VkGeometryFlagsKHR = VkFlags;
 
 #[repr(C)]
 pub struct VkAccelerationStructureKHROpaque { _private: [u8; 0] }
 pub type VkAccelerationStructureKHR = *mut VkAccelerationStructureKHROpaque;
+
+#[repr(C)]
+pub struct VkDeferredOperationKHROpaque { _private: [u8; 0] }
+pub type VkDeferredOperationKHR = *mut VkDeferredOperationKHROpaque;
+
 
 pub const VK_SHADER_UNUSED_KHR: u32 = !0u32;
 
@@ -63,12 +69,6 @@ pub enum VkStructureTypeExtRay {
     VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_INTERFACE_CREATE_INFO_KHR = 1000150018,
     // Provided by VK_KHR_ray_query
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR = 1000348013,
-
-    // DEPRECATED
-    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR = 1000150001,
-    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_KHR = 1000150008,
-    VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_KHR = 1000165006,
-    VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR = 1000290000,
 }
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPhysicalDeviceRayTracingPipelinePropertiesKHR.html
@@ -136,7 +136,152 @@ pub enum VkAccelerationStructureTypeKHR {
     VK_ACCELERATION_STRUCTURE_TYPE_GENERIC_KHR = 2,
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureGeometryKHR.html
+#[repr(C)]
+pub struct VkAccelerationStructureGeometryKHR {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub geometryType: VkGeometryTypeKHR,
+    pub geometry: VkAccelerationStructureGeometryDataKHR,
+    pub flags: VkGeometryFlagsKHR,
+}
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkBuildAccelerationStructureModeKHR.html
+#[repr(C)]
+pub enum VkBuildAccelerationStructureModeKHR {
+    VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR = 0,
+    VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR = 1,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkGeometryTypeKHR.html
+#[repr(C)]
+pub enum VkGeometryTypeKHR {
+    VK_GEOMETRY_TYPE_TRIANGLES_KHR = 0,
+    VK_GEOMETRY_TYPE_AABBS_KHR = 1,
+    VK_GEOMETRY_TYPE_INSTANCES_KHR = 2,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureGeometryDataKHR.html
+#[repr(C)]
+pub union VkAccelerationStructureGeometryDataKHR {
+    pub triangles: VkAccelerationStructureGeometryTrianglesDataKHR,
+    //pub aabbs: VkAccelerationStructureGeometryAabbsDataKHR,
+    //pub instances: VkAccelerationStructureGeometryInstancesDataKHR,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureGeometryTrianglesDataKHR.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct VkAccelerationStructureGeometryTrianglesDataKHR {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub vertexFormat: VkFormat,
+    pub vertexData: VkDeviceOrHostAddressConstKHR,
+    pub vertexStride: VkDeviceSize,
+    pub maxVertex: u32,
+    pub indexType: VkIndexType,
+    pub indexData: VkDeviceOrHostAddressConstKHR,
+    pub transformData: VkDeviceOrHostAddressConstKHR,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkDeviceOrHostAddressConstKHR.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub union VkDeviceOrHostAddressConstKHR {
+    pub deviceAddress: VkDeviceAddress,
+    pub hostAddress: *const c_void,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkDeviceOrHostAddressKHR.html
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub union VkDeviceOrHostAddressKHR {
+    pub deviceAddress: VkDeviceAddress,
+    pub hostAddress: *mut c_void,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureBuildRangeInfoKHR.html
+#[repr(C)]
+pub struct VkAccelerationStructureBuildRangeInfoKHR {
+    pub primitiveCount: u32,
+    pub primitiveOffset: u32,
+    pub firstVertex: u32,
+    pub transformOffset: u32,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureDeviceAddressInfoKHR.html
+#[repr(C)]
+pub struct VkAccelerationStructureDeviceAddressInfoKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *const c_void,
+    pub accelerationStructure: VkAccelerationStructureKHR,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRayTracingPipelineCreateInfoKHR.html
+#[repr(C)]
+pub struct VkRayTracingPipelineCreateInfoKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *const c_void,
+    pub flags: VkPipelineCreateFlags,
+    pub stageCount: u32,
+    pub pStages: *const VkPipelineShaderStageCreateInfo,
+    pub groupCount: u32,
+    pub pGroups: *const VkRayTracingShaderGroupCreateInfoKHR,
+    pub maxPipelineRayRecursionDepth: u32,
+    pub pLibraryInfo: *const VkPipelineLibraryCreateInfoKHR,
+    pub pLibraryInterface: *const VkRayTracingPipelineInterfaceCreateInfoKHR,
+    pub pDynamicState: *const VkPipelineDynamicStateCreateInfo,
+    pub layout: VkPipelineLayout,
+    pub basePipelineHandle: VkPipeline,
+    pub basePipelineIndex: i32,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkStridedDeviceAddressRegionKHR.html
+#[repr(C)]
+pub struct VkStridedDeviceAddressRegionKHR {
+    pub deviceAddress: VkDeviceAddress,
+    pub stride: VkDeviceSize,
+    pub size: VkDeviceSize,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRayTracingShaderGroupCreateInfoKHR.html
+#[repr(C)]
+pub struct VkRayTracingShaderGroupCreateInfoKHR {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub r#type: VkRayTracingShaderGroupTypeKHR,
+    pub generalShader: u32,
+    pub closestHitShader: u32,
+    pub anyHitShader: u32,
+    pub intersectionShader: u32,
+    pub pShaderGroupCaptureReplayHandle: *const c_void,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRayTracingShaderGroupTypeKHR.html
+#[repr(C)]
+pub enum VkRayTracingShaderGroupTypeKHR {
+    VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR = 0,
+    VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR = 1,
+    VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR = 2,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPipelineLibraryCreateInfoKHR.html
+#[repr(C)]
+pub struct VkPipelineLibraryCreateInfoKHR {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub libraryCount: u32,
+    pub pLibraries: *const VkPipeline,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkRayTracingPipelineInterfaceCreateInfoKHR.html
+#[repr(C)]
+pub struct VkRayTracingPipelineInterfaceCreateInfoKHR {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub maxPipelineRayPayloadSize: u32,
+    pub maxPipelineRayHitAttributeSize: u32,
+}
 
 mod dispatch {
     use super::*;
@@ -183,6 +328,7 @@ mod dispatch {
 
     // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdBuildAccelerationStructuresKHR.html
     pub fn dispatch_vkCmdBuildAccelerationStructuresKHR(
+        device: VkDevice,
         commandBuffer: VkCommandBuffer,
         infoCount: u32,
         pInfos: *const VkAccelerationStructureBuildGeometryInfoKHR,
