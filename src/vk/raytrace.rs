@@ -1479,7 +1479,7 @@ pub struct RayTracingGraphicsRender {
     pipeline: Arc<RayTracingGraphicsPipeline>,
     descriptor_sets: Arc<RayTracingDescriptorSets>,
     shader_binding_table: Arc<ShaderBindingTable>,
-    properties: Arc<VkPhysicalDeviceRayTracingPropertiesKHR>,
+    properties: Arc<VkPhysicalDeviceRayTracingPipelinePropertiesKHR>,
 }
 
 impl RayTracingGraphicsRender {

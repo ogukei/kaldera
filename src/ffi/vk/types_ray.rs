@@ -22,37 +22,53 @@ pub const VK_SHADER_UNUSED_KHR: u32 = !0u32;
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub enum VkStructureTypeExtRay {
-    VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_KHR = 1000165006,
-    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR = 1000165007,
+    // Provided by VK_KHR_acceleration_structure
+    VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR = 1000150007,
+    // Provided by VK_KHR_acceleration_structure
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR = 1000150000,
-    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR = 1000150001,
+    // Provided by VK_KHR_acceleration_structure
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR = 1000150002,
+    // Provided by VK_KHR_acceleration_structure
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR = 1000150003,
+    // Provided by VK_KHR_acceleration_structure
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR = 1000150004,
+    // Provided by VK_KHR_acceleration_structure
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR = 1000150005,
+    // Provided by VK_KHR_acceleration_structure
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR = 1000150006,
-    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_KHR = 1000150008,
-    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_VERSION_KHR = 1000150009,
+    // Provided by VK_KHR_acceleration_structure
+    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_VERSION_INFO_KHR = 1000150009,
+    // Provided by VK_KHR_acceleration_structure
     VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR = 1000150010,
+    // Provided by VK_KHR_acceleration_structure
     VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_TO_MEMORY_INFO_KHR = 1000150011,
+    // Provided by VK_KHR_acceleration_structure
     VK_STRUCTURE_TYPE_COPY_MEMORY_TO_ACCELERATION_STRUCTURE_INFO_KHR = 1000150012,
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_FEATURES_KHR = 1000150013,
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PROPERTIES_KHR = 1000150014,
-    VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR = 1000150015,
-    VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR = 1000150016,
+    // Provided by VK_KHR_acceleration_structure
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR = 1000150013,
+    // Provided by VK_KHR_acceleration_structure
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR = 1000150014,
+    // Provided by VK_KHR_acceleration_structure
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR = 1000150017,
+    // Provided by VK_KHR_acceleration_structure
+    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR = 1000150020,
+    // Provided by VK_KHR_ray_tracing_pipeline
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR = 1000347000,
+    // Provided by VK_KHR_ray_tracing_pipeline
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR = 1000347001,
+    // Provided by VK_KHR_ray_tracing_pipeline
+    VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR = 1000150015,
+    // Provided by VK_KHR_ray_tracing_pipeline
+    VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR = 1000150016,
+    // Provided by VK_KHR_ray_tracing_pipeline
     VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_INTERFACE_CREATE_INFO_KHR = 1000150018,
-    VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_MODULATION_STATE_CREATE_INFO_NV = 1000152000,
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV = 1000154000,
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_PROPERTIES_NV = 1000154001,
-    VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT = 1000158000,
-    VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT = 1000158001,
-    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT = 1000158002,
-    VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_LIST_CREATE_INFO_EXT = 1000158003,
-    VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_EXPLICIT_CREATE_INFO_EXT = 1000158004,
-    VK_STRUCTURE_TYPE_IMAGE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT = 1000158005,
-    VK_STRUCTURE_TYPE_VALIDATION_CACHE_CREATE_INFO_EXT = 1000160000,
-    VK_STRUCTURE_TYPE_SHADER_MODULE_VALIDATION_CACHE_CREATE_INFO_EXT = 1000160001,
+    // Provided by VK_KHR_ray_query
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR = 1000348013,
+
+    // DEPRECATED
+    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR = 1000150001,
+    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_KHR = 1000150008,
+    VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_KHR = 1000165006,
     VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR = 1000290000,
 }
 
@@ -63,21 +79,32 @@ pub enum VkGeometryTypeKHR {
     VK_GEOMETRY_TYPE_INSTANCES_KHR = 1000150000,
 }
 
-// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPhysicalDeviceRayTracingPropertiesKHR.html
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPhysicalDeviceRayTracingPipelinePropertiesKHR.html
 #[repr(C)]
 #[derive(Debug)]
-pub struct VkPhysicalDeviceRayTracingPropertiesKHR {
+pub struct VkPhysicalDeviceRayTracingPipelinePropertiesKHR {
     pub sType: VkStructureTypeExtRay,
     pub pNext: *mut c_void,
     pub shaderGroupHandleSize: u32,
-    pub maxRecursionDepth: u32,
+    pub maxRayRecursionDepth: u32,
     pub maxShaderGroupStride: u32,
     pub shaderGroupBaseAlignment: u32,
-    pub maxGeometryCount: u64,
-    pub maxInstanceCount: u64,
-    pub maxPrimitiveCount: u64,
-    pub maxDescriptorSetAccelerationStructures: u32,
     pub shaderGroupHandleCaptureReplaySize: u32,
+    pub maxRayDispatchInvocationCount: u32,
+    pub shaderGroupHandleAlignment: u32,
+    pub maxRayHitAttributeSize: u32,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPhysicalDeviceRayTracingPipelineFeaturesKHR.html
+#[repr(C)]
+pub struct VkPhysicalDeviceRayTracingPipelineFeaturesKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *mut c_void,
+    pub rayTracingPipeline: VkBool32,
+    pub rayTracingPipelineShaderGroupHandleCaptureReplay: VkBool32,
+    pub rayTracingPipelineShaderGroupHandleCaptureReplayMixed: VkBool32,
+    pub rayTracingPipelineTraceRaysIndirect: VkBool32,
+    pub rayTraversalPrimitiveCulling: VkBool32,
 }
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureCreateGeometryTypeInfoKHR.html 
@@ -353,22 +380,6 @@ pub struct VkStridedBufferRegionKHR {
     pub offset: VkDeviceSize,
     pub stride: VkDeviceSize,
     pub size: VkDeviceSize,
-}
-
-// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPhysicalDeviceRayTracingFeaturesKHR.html
-#[repr(C)]
-pub struct VkPhysicalDeviceRayTracingFeaturesKHR {
-    pub sType: VkStructureTypeExtRay,
-    pub pNext: *mut c_void,
-    pub rayTracing: VkBool32,
-    pub rayTracingShaderGroupHandleCaptureReplay: VkBool32,
-    pub rayTracingShaderGroupHandleCaptureReplayMixed: VkBool32,
-    pub rayTracingAccelerationStructureCaptureReplay: VkBool32,
-    pub rayTracingIndirectTraceRays: VkBool32,
-    pub rayTracingIndirectAccelerationStructureBuild: VkBool32,
-    pub rayTracingHostAccelerationStructureCommands: VkBool32,
-    pub rayQuery: VkBool32,
-    pub rayTracingPrimitiveCulling: VkBool32,
 }
 
 mod dispatch {
