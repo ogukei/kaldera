@@ -27,7 +27,8 @@ impl DeviceQueuesCapabilities {
             ],
             &Self::RayTracing => vec![
                 CString::new("VK_KHR_swapchain").unwrap(),
-                CString::new("VK_KHR_ray_tracing").unwrap(),
+                CString::new("VK_KHR_ray_tracing_pipeline").unwrap(),
+                CString::new("VK_KHR_acceleration_structure").unwrap(),
                 CString::new("VK_KHR_dedicated_allocation").unwrap(),
                 CString::new("VK_KHR_get_memory_requirements2").unwrap(),
                 CString::new("VK_KHR_buffer_device_address").unwrap(),

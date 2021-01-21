@@ -413,7 +413,7 @@ impl PhysicalDeviceCapabilities {
     }
 
     pub fn has_raytracing(&self) -> bool {
-        let name = CString::new("VK_KHR_ray_tracing")
+        let name = CString::new("VK_KHR_ray_tracing_pipeline")
             .unwrap_or_default();
         self.devices.iter()
             .filter_map(|v| v.extension_properties().ok())
