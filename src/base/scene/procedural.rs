@@ -1,5 +1,5 @@
 
-
+/*
 use gltf;
 use nalgebra_glm as glm;
 
@@ -185,3 +185,4 @@ impl SphereMaterial {
     }
 }
 
+*/
