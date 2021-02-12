@@ -299,7 +299,8 @@ pub struct PhysicalDeviceFeatures {
     features: Box<MaybeUninit<VkPhysicalDeviceFeatures2>>,
     device_address: Box<MaybeUninit<VkPhysicalDeviceBufferDeviceAddressFeatures>>,
     indexing: Box<MaybeUninit<VkPhysicalDeviceDescriptorIndexingFeatures>>,
-    ray_tracing: Box<MaybeUninit<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>>,
+    ray_tracing_pipeline: Box<MaybeUninit<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>>,
+    ray_tracing_structures: Box<MaybeUninit<VkPhysicalDeviceAccelerationStructureFeaturesKHR>>,
 }
 
 impl PhysicalDeviceFeatures {
@@ -307,7 +308,8 @@ impl PhysicalDeviceFeatures {
         let mut features: Box<MaybeUninit<VkPhysicalDeviceFeatures2>> = Box::new(MaybeUninit::zeroed());
         let mut device_address: Box<MaybeUninit<VkPhysicalDeviceBufferDeviceAddressFeatures>> = Box::new(MaybeUninit::zeroed());
         let mut indexing: Box<MaybeUninit<VkPhysicalDeviceDescriptorIndexingFeatures>> = Box::new(MaybeUninit::zeroed());
-        let mut ray_tracing: Box<MaybeUninit<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>> = Box::new(MaybeUninit::zeroed());
+        let mut ray_tracing_pipeline: Box<MaybeUninit<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>> = Box::new(MaybeUninit::zeroed());
+        let mut ray_tracing_structures: Box<MaybeUninit<VkPhysicalDeviceAccelerationStructureFeaturesKHR>> = Box::new(MaybeUninit::zeroed());
         {
             let features = features.as_mut_ptr().as_mut().unwrap();
             features.sType = VkStructureType::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
@@ -315,8 +317,10 @@ impl PhysicalDeviceFeatures {
             device_address.sType = VkStructureType::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
             let indexing = indexing.as_mut_ptr().as_mut().unwrap();
             indexing.sType = VkStructureType::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
-            let ray_tracing = ray_tracing.as_mut_ptr().as_mut().unwrap();
-            ray_tracing.sType = VkStructureTypeExtRay::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+            let ray_tracing_pipeline = ray_tracing_pipeline.as_mut_ptr().as_mut().unwrap();
+            ray_tracing_pipeline.sType = VkStructureTypeExtRay::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+            let ray_tracing_structures = ray_tracing_structures.as_mut_ptr().as_mut().unwrap();
+            ray_tracing_structures.sType = VkStructureTypeExtRay::VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
         }
         {
             let features = features.as_mut_ptr().as_mut().unwrap();
@@ -328,14 +332,19 @@ impl PhysicalDeviceFeatures {
         }
         {
             let indexing = indexing.as_mut_ptr().as_mut().unwrap();
-            indexing.pNext = ray_tracing.as_mut_ptr() as *mut _;
+            indexing.pNext = ray_tracing_pipeline.as_mut_ptr() as *mut _;
+        }
+        {
+            let ray_tracing_pipeline = ray_tracing_pipeline.as_mut_ptr().as_mut().unwrap();
+            ray_tracing_pipeline.pNext = ray_tracing_structures.as_mut_ptr() as *mut _;
         }
         vkGetPhysicalDeviceFeatures2(handle, features.as_mut_ptr());
         Self {
             features,
             device_address,
             indexing,
-            ray_tracing,
+            ray_tracing_pipeline,
+            ray_tracing_structures,
         }
     }
 

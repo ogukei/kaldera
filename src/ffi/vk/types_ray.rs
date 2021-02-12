@@ -99,6 +99,18 @@ pub struct VkPhysicalDeviceRayTracingPipelineFeaturesKHR {
     pub rayTraversalPrimitiveCulling: VkBool32,
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkPhysicalDeviceAccelerationStructureFeaturesKHR.html
+#[repr(C)]
+pub struct VkPhysicalDeviceAccelerationStructureFeaturesKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *mut c_void,
+    pub accelerationStructure: VkBool32,
+    pub accelerationStructureCaptureReplay: VkBool32,
+    pub accelerationStructureIndirectBuild: VkBool32,
+    pub accelerationStructureHostCommands: VkBool32,
+    pub descriptorBindingAccelerationStructureUpdateAfterBind: VkBool32,
+}
+
 // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkAccelerationStructureCreateInfoKHR.html
 #[repr(C)]
 pub struct VkAccelerationStructureCreateInfoKHR {
