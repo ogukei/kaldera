@@ -2,7 +2,7 @@
 # compiles all the GLSL files in ./data
 
 ifndef GLSLC
-GLSLC=glslc
+GLSLC=glslangValidator
 endif
 
 SOURCE_DIR=data/shaders

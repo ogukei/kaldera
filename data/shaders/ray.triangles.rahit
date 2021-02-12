@@ -84,7 +84,7 @@ void main() {
   }
   const float textureAlpha = texture(textures[nonuniformEXT(material.colorTextureIndex)], texcoord0).a;
   if (textureAlpha < 0.5) {
-    ignoreIntersectionEXT();
+    ignoreIntersectionEXT;
     return;
   }
 }
