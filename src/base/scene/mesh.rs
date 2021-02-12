@@ -239,16 +239,16 @@ impl SceneMeshPrimitiveGeometry {
         let num_vertices = mesh_primitive.primitive().positions().count();
         let num_indices = mesh_primitive.primitive().indices().count();
         assert_eq!(mesh_primitive.primitive().positions().count(), mesh_primitive.primitive.normals().count());
-        let structure_geometry = BottomLevelAccelerationStructureTrianglesGeometry::new(
-                num_vertices as u32, 
-                vertex_stride as VkDeviceSize,
-                mesh_primitive.offset.vertex_offset as u32,
-                staging_buffers.vertex_buffer().device_buffer_memory(), 
-                num_indices as u32, 
-                mesh_primitive.offset.index_offset as u32,
-                staging_buffers.index_buffer().device_buffer_memory(),
-                mesh_primitive.primitive().is_opaque())
-            .unwrap();
+        let structure_geometry = BottomLevelAccelerationStructureGeometry::triangles(
+            num_vertices as u32, 
+            vertex_stride as VkDeviceSize,
+            mesh_primitive.offset.vertex_offset as u32,
+            staging_buffers.vertex_buffer().device_buffer_memory(), 
+            num_indices as u32, 
+            mesh_primitive.offset.index_offset as u32,
+            staging_buffers.index_buffer().device_buffer_memory(),
+            mesh_primitive.primitive().is_opaque()
+        );
         let v = Self {
             index: mesh_primitive.index(),
             offset: mesh_primitive.offset.clone(),

@@ -14,244 +14,69 @@ use libc::{c_float, c_void, size_t};
 use std::sync::Arc;
 use std::ffi::CString;
 
-use VkStructureType::*;
 use VkStructureTypeExtRay::*;
-use VkBuildAccelerationStructureFlagBitsKHR::*;
-use VkAccelerationStructureTypeKHR::*;
-use VkAccelerationStructureMemoryRequirementsTypeKHR::*;
-use VkAccelerationStructureBuildTypeKHR::*;
-use VkMemoryPropertyFlagBits::*;
-use VkMemoryAllocateFlagBits::*;
-use VkBufferUsageFlagBits::*;
-use VkGeometryFlagBitsKHR::*;
-use VkPipelineStageFlagBits::*;
-use VkGeometryInstanceFlagBitsKHR::*;
-
-pub struct BottomLevelAccelerationStructuresBuilder<'a> {
-    command_pool: &'a Arc<CommandPool>,
-    geometries: &'a [Arc<BottomLevelAccelerationStructureGeometry>],
-}
-
-impl<'a> BottomLevelAccelerationStructuresBuilder<'a> {
-    pub fn new(command_pool: &'a Arc<CommandPool>, geometries: &'a [Arc<BottomLevelAccelerationStructureGeometry>]) -> Self {
-        Self {
-            command_pool,
-            geometries,
-        }
-    }
-
-    pub fn build(self) -> Result<Vec<Arc<BottomLevelAccelerationStructure>>> {
-        let command_pool = self.command_pool;
-        let device = command_pool.queue().device();
-        let recording = CommandBufferRecording::new_onetime_submit(command_pool)?;
-        let builds = self.geometries.iter()
-            .map(|v| BottomLevelAccelerationStructureBuild::new(&recording, std::slice::from_ref(v)))
-            .collect::<Result<Vec<_>>>()?;
-        let scratch_size = builds.iter()
-            .map(|v| v.scratch_size())
-            .max()
-            .unwrap();
-        let scratch_buffer_memory = DedicatedBufferMemory::new(
-            device, 
-            VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR as VkBufferUsageFlags
-                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-            scratch_size,
-        )
-            .unwrap();
-        let objects: Vec<_> = builds.into_iter()
-            .map(|v| v.build(&scratch_buffer_memory))
-            .collect();
-        let command_buffer = recording.complete();
-        unsafe {
-            let command_buffer_handle = command_buffer.handle();
-            command_pool.queue()
-                .submit_then_wait(std::slice::from_ref(&command_buffer_handle))
-                .unwrap();
-        }
-        objects.into_iter()
-            .map(BottomLevelAccelerationStructure::new)
-            .collect()
-    }
-}
-
-struct BottomLevelAccelerationStructureBuild<'a, 'b: 'a> {
-    recording: &'a CommandBufferRecording<'b>,
-    scratch_size: VkDeviceSize,
-    geometry_builds: Vec<BottomLevelAccelerationStructureGeometryBuild>,
-}
-
-impl<'a, 'b: 'a> BottomLevelAccelerationStructureBuild<'a, 'b> {
-    fn new(
-        recording: &'b CommandBufferRecording<'a>, 
-        geometries: &[Arc<BottomLevelAccelerationStructureGeometry>],
-    ) -> Result<Self> {
-        unsafe {
-            let command_pool = recording.command_pool();
-            let device = command_pool.queue().device();
-            let geometry_builds = geometries.iter()
-                .map(|v| BottomLevelAccelerationStructureGeometryBuild::new(device, v))
-                .collect::<Result<Vec<_>>>()?;
-            let scratch_size = geometry_builds.iter()
-                .map(|v| v.structure())
-                .map(|v| v.scratch_memory_requirements())
-                .map(|v| v.memoryRequirements.size)
-                .max()
-                .unwrap();
-            let builder = Self {
-                recording,
-                geometry_builds,
-                scratch_size,
-            };
-            Ok(builder)
-        }
-    }
-
-    #[inline]
-    fn scratch_size(&self) -> VkDeviceSize {
-        self.scratch_size
-    }
-
-    fn build(self, scratch_buffer: &Arc<DedicatedBufferMemory>) -> BottomLevelAccelerationStructureGeometryObject {
-        assert_eq!(self.geometry_builds.len(), 1, "multiple geometries not supported yet");
-        let build = self.geometry_builds.into_iter().nth(0).unwrap();
-        unsafe {
-            build.build(self.recording, scratch_buffer)
-        }
-    }
-}
-
-pub struct BottomLevelAccelerationStructure {
-    object: BottomLevelAccelerationStructureGeometryObject,
-}
-
-impl BottomLevelAccelerationStructure {
-    fn new(object: BottomLevelAccelerationStructureGeometryObject) -> Result<Arc<Self>> {
-        let structure = Self {
-            object,
-        };
-        Ok(Arc::new(structure))
-    }
-
-    fn structure_device_address(&self) -> VkDeviceAddress {
-        self.object.structure().device_address()
-    }
-}
+use VkStructureType::*;
 
 pub enum BottomLevelAccelerationStructureGeometry {
-    Triangles(Arc<BottomLevelAccelerationStructureTrianglesGeometry>),
-    AABBs(Arc<BottomLevelAccelerationStructureAABBsGeometry>),
+    Triangles(BottomLevelAccelerationStructureTriangles),
 }
 
 impl BottomLevelAccelerationStructureGeometry {
-    fn type_info_vec(&self) -> &Vec<VkAccelerationStructureCreateGeometryTypeInfoKHR> {
+    pub fn triangles(
+        num_vertices: u32,
+        vertex_stride: VkDeviceSize,
+        vertex_offset_index: u32,
+        vertex_buffer_memory: &Arc<DedicatedBufferMemory>,
+        num_indices: u32,
+        index_offset_index: u32,
+        index_buffer_memory: &Arc<DedicatedBufferMemory>,
+        is_opaque: bool,
+    ) -> Arc<Self> {
+        let triangles = BottomLevelAccelerationStructureTriangles::new(
+            num_vertices, 
+            vertex_stride, 
+            vertex_offset_index, 
+            vertex_buffer_memory,
+            num_indices, 
+            index_offset_index, 
+            index_buffer_memory, 
+            is_opaque
+        );
+        Arc::new(Self::Triangles(triangles))
+    }
+
+    fn geometry(&self) -> VkAccelerationStructureGeometryKHR {
         match &self {
-            Self::Triangles(triangles) => triangles.type_info_vec(),
-            Self::AABBs(aabbs) => aabbs.type_info_vec(),
+            &Self::Triangles(triangles) => triangles.geometry(),
         }
     }
 
-    fn info_vec(&self) -> &Vec<VkAccelerationStructureGeometryKHR> {
+    fn range_info(&self) -> VkAccelerationStructureBuildRangeInfoKHR {
         match &self {
-            Self::Triangles(triangles) => triangles.info_vec(),
-            Self::AABBs(aabbs) => aabbs.info_vec(),
+            &Self::Triangles(triangles) => triangles.range_info(),
         }
     }
 
-    fn offset_vec(&self) -> &Vec<VkAccelerationStructureBuildOffsetInfoKHR> {
+    fn max_primitive_count(&self) -> u32 {
         match &self {
-            Self::Triangles(triangles) => triangles.offset_vec(),
-            Self::AABBs(aabbs) => aabbs.offset_vec(),
+            &Self::Triangles(triangles) => triangles.max_primitive_count(),
         }
     }
 }
 
-pub struct BottomLevelAccelerationStructureAABBsGeometry {
-    type_info_vec: Vec<VkAccelerationStructureCreateGeometryTypeInfoKHR>,
-    info_vec: Vec<VkAccelerationStructureGeometryKHR>,
-    offset_vec: Vec<VkAccelerationStructureBuildOffsetInfoKHR>,
-    aabb_buffer_memory: Arc<DedicatedBufferMemory>,
-}
-
-impl BottomLevelAccelerationStructureAABBsGeometry {
-    pub fn new(
-        aabb_count: u32, 
-        aabb_buffer_memory: &Arc<DedicatedBufferMemory>,
-    ) -> Result<Arc<BottomLevelAccelerationStructureGeometry>> {
-        Self::init(aabb_count, aabb_buffer_memory)
-            .map(|v| BottomLevelAccelerationStructureGeometry::AABBs(v))
-            .map(Arc::new)
-    }
-
-    fn init(
-        aabb_count: u32, 
-        aabb_buffer_memory: &Arc<DedicatedBufferMemory>,
-    ) -> Result<Arc<Self>> {
-        let stride = std::mem::size_of::<[f32; 6]>() as VkDeviceSize;
-        let type_info = VkAccelerationStructureCreateGeometryTypeInfoKHR {
-            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR,
-            pNext: ptr::null(),
-            geometryType: VkGeometryTypeKHR::VK_GEOMETRY_TYPE_AABBS_KHR,
-            maxPrimitiveCount: aabb_count,
-            indexType: VkIndexType::VK_INDEX_TYPE_NONE_KHR,
-            maxVertexCount: 0,
-            vertexFormat: VkFormat::VK_FORMAT_UNDEFINED,
-            allowsTransforms: VK_FALSE,
-        };
-        let aabbs_data = VkAccelerationStructureGeometryAabbsDataKHR {
-            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR,
-            pNext: ptr::null(),
-            data: aabb_buffer_memory.buffer_device_address(),
-            stride: stride,
-        };
-        let geometry_data = VkAccelerationStructureGeometryDataKHR {
-            aabbs: aabbs_data,
-        };
-        let info = VkAccelerationStructureGeometryKHR {
-            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-            pNext: ptr::null(),
-            geometryType: VkGeometryTypeKHR::VK_GEOMETRY_TYPE_AABBS_KHR,
-            geometry: geometry_data,
-            flags: VK_GEOMETRY_OPAQUE_BIT_KHR as VkGeometryFlagsKHR,
-        };
-        let offset = VkAccelerationStructureBuildOffsetInfoKHR {
-            primitiveCount: aabb_count,
-            primitiveOffset: 0,
-            firstVertex: 0,
-            transformOffset: 0,
-        };
-        let geometry = Self {
-            type_info_vec: vec![type_info],
-            info_vec: vec![info],
-            offset_vec: vec![offset],
-            aabb_buffer_memory: Arc::clone(aabb_buffer_memory),
-        };
-        Ok(Arc::new(geometry))
-    }
-
-    fn type_info_vec(&self) -> &Vec<VkAccelerationStructureCreateGeometryTypeInfoKHR> {
-        &self.type_info_vec
-    }
-
-    fn info_vec(&self) -> &Vec<VkAccelerationStructureGeometryKHR> {
-        &self.info_vec
-    }
-
-    fn offset_vec(&self) -> &Vec<VkAccelerationStructureBuildOffsetInfoKHR> {
-        &self.offset_vec
-    }
-}
-
-pub struct BottomLevelAccelerationStructureTrianglesGeometry {
-    type_info_vec: Vec<VkAccelerationStructureCreateGeometryTypeInfoKHR>,
-    info_vec: Vec<VkAccelerationStructureGeometryKHR>,
-    offset_vec: Vec<VkAccelerationStructureBuildOffsetInfoKHR>,
+pub struct BottomLevelAccelerationStructureTriangles {
+    num_vertices: u32,
+    vertex_stride: VkDeviceSize,
+    vertex_offset_index: u32,
+    num_indices: u32,
+    index_offset_index: u32,
+    is_opaque: bool,
     vertex_buffer_memory: Arc<DedicatedBufferMemory>,
     index_buffer_memory: Arc<DedicatedBufferMemory>,
 }
 
-impl BottomLevelAccelerationStructureTrianglesGeometry {
-    pub fn new(
+impl BottomLevelAccelerationStructureTriangles {
+    fn new(
         num_vertices: u32,
         vertex_stride: VkDeviceSize,
         vertex_offset_index: u32,
@@ -260,325 +85,456 @@ impl BottomLevelAccelerationStructureTrianglesGeometry {
         index_offset_index: u32,
         index_buffer_memory: &Arc<DedicatedBufferMemory>,
         is_opaque: bool,
-    ) -> Result<Arc<BottomLevelAccelerationStructureGeometry>> {
-        unsafe { 
-            Self::init(num_vertices, 
-                vertex_stride, 
-                vertex_offset_index, 
-                vertex_buffer_memory, 
-                num_indices, 
-                index_offset_index, 
-                index_buffer_memory,
-                is_opaque,
-                )
-                .map(|v| BottomLevelAccelerationStructureGeometry::Triangles(v))
-                .map(Arc::new)
-        }
+    ) -> Self {
+        let triangles = Self {
+            vertex_buffer_memory: Arc::clone(vertex_buffer_memory),
+            index_buffer_memory: Arc::clone(index_buffer_memory),
+            num_vertices,
+            vertex_stride,
+            vertex_offset_index,
+            num_indices,
+            index_offset_index,
+            is_opaque,
+        };
+        triangles
     }
 
-    unsafe fn init(
+    fn geometry(&self) -> VkAccelerationStructureGeometryKHR {
+        Self::make_geometry(
+            self.num_vertices, 
+            self.vertex_stride, 
+            &self.vertex_buffer_memory, 
+            self.num_indices, 
+            &self.index_buffer_memory, 
+            self.is_opaque
+        )
+    }
+
+    fn range_info(&self) -> VkAccelerationStructureBuildRangeInfoKHR {
+        let primitive_count = self.num_indices / 3;
+        let primitive_offset = self.index_offset_index * std::mem::size_of::<u32>() as u32;
+        let range_info = VkAccelerationStructureBuildRangeInfoKHR {
+            primitiveCount: primitive_count,
+            primitiveOffset: primitive_offset,
+            firstVertex: self.vertex_offset_index,
+            transformOffset: 0,
+        };
+        range_info
+    }
+
+    fn max_primitive_count(&self) -> u32 {
+        self.num_indices / 3
+    }
+
+    fn make_geometry(
         num_vertices: u32,
         vertex_stride: VkDeviceSize,
-        vertex_offset_index: u32,
         vertex_buffer_memory: &Arc<DedicatedBufferMemory>,
         num_indices: u32,
-        index_offset_index: u32,
         index_buffer_memory: &Arc<DedicatedBufferMemory>,
-        is_opaque: bool,
-    ) -> Result<Arc<Self>> {
-        // assumes single type info
-        let primitive_count = num_indices / 3;
-        let type_info = VkAccelerationStructureCreateGeometryTypeInfoKHR {
-            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR,
-            pNext: ptr::null(),
-            geometryType: VkGeometryTypeKHR::VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-            maxPrimitiveCount: primitive_count,
-            indexType: VkIndexType::VK_INDEX_TYPE_UINT32,
-            maxVertexCount: num_vertices,
-            vertexFormat: VkFormat::VK_FORMAT_R32G32B32_SFLOAT,
-            allowsTransforms: VK_FALSE,
-        };
-        let triangles_data = VkAccelerationStructureGeometryTrianglesDataKHR {
+        is_opaque: bool
+    ) -> VkAccelerationStructureGeometryKHR {
+        use VkGeometryFlagBitsKHR::*;
+        let triangles = VkAccelerationStructureGeometryTrianglesDataKHR {
             sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
             pNext: ptr::null(),
             vertexFormat: VkFormat::VK_FORMAT_R32G32B32_SFLOAT,
-            vertexData: vertex_buffer_memory.buffer_device_address(),
+            vertexData: VkDeviceOrHostAddressConstKHR {
+                deviceAddress: vertex_buffer_memory.buffer_device_address(),
+            },
             vertexStride: vertex_stride,
+            // maxVertex is the highest index of a vertex that will be addressed 
+            // by a build command using this structure.
+            maxVertex: num_vertices,
             indexType: VkIndexType::VK_INDEX_TYPE_UINT32,
-            indexData: index_buffer_memory.buffer_device_address(),
-            transformData: 0,
+            indexData: VkDeviceOrHostAddressConstKHR {
+                deviceAddress: index_buffer_memory.buffer_device_address(),
+            },
+            transformData: VkDeviceOrHostAddressConstKHR {
+                deviceAddress: 0,
+            },
         };
-        let geometry_data = VkAccelerationStructureGeometryDataKHR {
-            triangles: triangles_data,
+        let geometry_flags: VkGeometryFlagBitsKHR = if is_opaque { 
+            VK_GEOMETRY_OPAQUE_BIT_KHR 
+        } else { 
+            VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR 
         };
-        let geometry_flags: VkGeometryFlagsKHR = if is_opaque {
-            VK_GEOMETRY_OPAQUE_BIT_KHR as VkGeometryFlagsKHR
-        } else {
-            VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR as VkGeometryFlagsKHR
-        };
-        let info = VkAccelerationStructureGeometryKHR {
-            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+        VkAccelerationStructureGeometryKHR {
+            sType: VkStructureTypeExtRay::VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
             pNext: ptr::null(),
             geometryType: VkGeometryTypeKHR::VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-            geometry: geometry_data,
-            flags: geometry_flags,
-        };
-        let offset = VkAccelerationStructureBuildOffsetInfoKHR {
-            primitiveCount: primitive_count,
-            primitiveOffset: index_offset_index * std::mem::size_of::<u32>() as u32,
-            firstVertex: vertex_offset_index,
-            transformOffset: 0,
-        };
-        let geometry = Self {
-            type_info_vec: vec![type_info],
-            info_vec: vec![info],
-            offset_vec: vec![offset],
-            vertex_buffer_memory: Arc::clone(vertex_buffer_memory),
-            index_buffer_memory: Arc::clone(index_buffer_memory),
-        };
-        Ok(Arc::new(geometry))
-    }
-
-    fn type_info_vec(&self) -> &Vec<VkAccelerationStructureCreateGeometryTypeInfoKHR> {
-        &self.type_info_vec
-    }
-
-    fn info_vec(&self) -> &Vec<VkAccelerationStructureGeometryKHR> {
-        &self.info_vec
-    }
-
-    fn offset_vec(&self) -> &Vec<VkAccelerationStructureBuildOffsetInfoKHR> {
-        &self.offset_vec
-    }
-}
-
-pub struct BottomLevelAccelerationStructureGeometryBuild {
-    geometry: Arc<BottomLevelAccelerationStructureGeometry>,
-    structure: Arc<AccelerationStructure>,
-}
-
-impl BottomLevelAccelerationStructureGeometryBuild {
-    unsafe fn new(device: &Arc<Device>, geometry: &Arc<BottomLevelAccelerationStructureGeometry>) -> Result<Self> {
-        let create_info = VkAccelerationStructureCreateInfoKHR {
-            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
-            pNext: ptr::null(),
-            compactedSize: 0,
-            r#type: VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-            flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkFlags,
-            maxGeometryCount: geometry.type_info_vec().len() as u32,
-            pGeometryInfos: geometry.type_info_vec().as_ptr(),
-            deviceAddress: 0,
-        };
-        let structure = AccelerationStructure::new(device, &create_info)
-            .unwrap();
-        let object = Self {
-            geometry: Arc::clone(geometry),
-            structure,
-        };
-        Ok(object)
-    }
-
-    fn structure(&self) -> &Arc<AccelerationStructure> {
-        &self.structure
-    }
-
-    unsafe fn build(self, 
-        recording: &CommandBufferRecording, 
-        scratch_buffer_memory: &Arc<DedicatedBufferMemory>,
-    ) -> BottomLevelAccelerationStructureGeometryObject {
-        let structure = self.structure;
-        let geometry = self.geometry;
-        let command_pool = recording.command_pool();
-        let device = command_pool.queue().device();
-        let build_info = VkAccelerationStructureBuildGeometryInfoKHR {
-            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-            pNext: ptr::null(),
-            r#type: VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-            flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkFlags,
-            update: VK_FALSE,
-            srcAccelerationStructure: ptr::null_mut(),
-            dstAccelerationStructure: structure.handle(),
-            geometryArrayOfPointers: VK_FALSE,
-            geometryCount: geometry.info_vec().len() as u32,
-            ppGeometries: &geometry.info_vec().as_ptr(),
-            scratchData: scratch_buffer_memory.buffer_device_address(),
-        };
-        // converts to an array of pointers to arrays of VkAccelerationStructureBuildOffsetInfoKHR
-        let offset_ptr_vec = geometry.offset_vec().iter()
-            .map(|v| v as *const VkAccelerationStructureBuildOffsetInfoKHR)
-            .collect::<Vec<_>>();
-        dispatch_vkCmdBuildAccelerationStructureKHR(device.handle(), 
-            recording.command_buffer(), 1, &build_info, offset_ptr_vec.as_ptr());
-        // memory barrier allowing reuse of scratch across builds
-        let memory_barrier = VkMemoryBarrier {
-            sType: VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-            pNext: ptr::null(),
-            srcAccessMask: VkAccessFlagBits::VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR as VkAccessFlags,
-            dstAccessMask: VkAccessFlagBits::VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR as VkAccessFlags
-        };
-        vkCmdPipelineBarrier(recording.command_buffer(), 
-            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR as VkPipelineStageFlags,
-            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR as VkPipelineStageFlags, 
-            0, 
-            1, &memory_barrier,
-            0, ptr::null(),
-            0, ptr::null(),
-        );
-        BottomLevelAccelerationStructureGeometryObject {
-            geometry,
-            structure,
+            geometry: VkAccelerationStructureGeometryDataKHR {
+                triangles: triangles,
+            },
+            flags: geometry_flags as VkGeometryFlagsKHR,
         }
     }
 }
 
-struct BottomLevelAccelerationStructureGeometryObject {
-    geometry: Arc<BottomLevelAccelerationStructureGeometry>,
-    structure: Arc<AccelerationStructure>,
+struct AccelerationStructureBufferMemory {
+    device: Arc<Device>,
+    buffer: VkBuffer,
+    memory: VkDeviceMemory,
 }
 
-impl BottomLevelAccelerationStructureGeometryObject {
-    #[inline]
-    fn structure(&self) -> &Arc<AccelerationStructure> {
-        &self.structure
+impl AccelerationStructureBufferMemory {
+    fn new(device: &Arc<Device>, structure_size: VkDeviceSize) -> Arc<Self> {
+        unsafe {
+            // creates buffer
+            let mut buffer = MaybeUninit::<VkBuffer>::zeroed();
+            {
+                use VkBufferUsageFlagBits::*;
+                let buffer_create_info = VkBufferCreateInfo::new(
+                    structure_size, 
+                    VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR as VkBufferUsageFlags
+                        | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+                    VkSharingMode::VK_SHARING_MODE_EXCLUSIVE,
+                );
+                vkCreateBuffer(device.handle(), &buffer_create_info, ptr::null(), buffer.as_mut_ptr())
+                    .into_result()
+                    .unwrap();
+            }
+            let buffer = buffer.assume_init();
+            // creates memory
+            let mut memory = MaybeUninit::<VkDeviceMemory>::zeroed();
+            {
+                use VkMemoryAllocateFlagBits::*;
+                let mut requirements = MaybeUninit::<VkMemoryRequirements>::zeroed();
+                vkGetBufferMemoryRequirements(device.handle(), buffer, requirements.as_mut_ptr());
+                let requirements = requirements.assume_init();
+                let flags_info = VkMemoryAllocateFlagsInfo {
+                    sType: VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+                    pNext: ptr::null(),
+                    flags: VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT as VkMemoryAllocateFlags,
+                    deviceMask: 0,
+                };
+                // physical memory properties
+                use VkMemoryPropertyFlagBits::*;
+                let memory_type_index = device.physical_device()
+                    .memory_type_index(&requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags)
+                    .unwrap();
+                let allocate_info = VkMemoryAllocateInfo {
+                    sType: VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+                    pNext: &flags_info as *const _ as *const c_void,
+                    allocationSize: requirements.size,
+                    memoryTypeIndex: memory_type_index,
+                };
+                vkAllocateMemory(device.handle(), &allocate_info, ptr::null(), memory.as_mut_ptr())
+                    .into_result()
+                    .unwrap();
+            }
+            let memory = memory.assume_init();
+            vkBindBufferMemory(device.handle(), buffer, memory, 0);
+            let buffer_memory = Self {
+                device: Arc::clone(device),
+                buffer,
+                memory,
+            };
+            Arc::new(buffer_memory)
+        }
+    }
+
+    fn buffer(&self) -> VkBuffer {
+        self.buffer
     }
 }
 
-pub struct AccelerationStructure {
-    device: Arc<Device>,
+impl Drop for AccelerationStructureBufferMemory {
+    fn drop(&mut self) {
+        unsafe {
+            vkFreeMemory(self.device.handle(), self.memory, ptr::null());
+            vkDestroyBuffer(self.device.handle(), self.buffer, ptr::null());
+        }
+    }
+}
+
+// represents an internal acceleration structure both in and after build
+struct AccelerationStructure {
     handle: VkAccelerationStructureKHR,
-    memory: VkDeviceMemory,
-    memory_requirements: VkMemoryRequirements2,
+    buffer_memory: Arc<AccelerationStructureBufferMemory>,
+    device: Arc<Device>,
 }
 
 impl AccelerationStructure {
-    pub fn new(
-        device: &Arc<Device>, 
-        create_info: &VkAccelerationStructureCreateInfoKHR,
-    ) -> Result<Arc<Self>> {
-        unsafe { Self::init(device, create_info) }
-    }
-
-    unsafe fn init(device: &Arc<Device>, create_info: &VkAccelerationStructureCreateInfoKHR) -> Result<Arc<Self>> {
-        let mut structure_handle = MaybeUninit::<VkAccelerationStructureKHR>::zeroed();
-        vkCreateAccelerationStructureKHR(device.handle(), create_info, ptr::null(), structure_handle.as_mut_ptr())
-            .into_result()
-            .unwrap();
-        let structure_handle = structure_handle.assume_init();
-        // find memory requirements
-        let mut requirements = MaybeUninit::<VkMemoryRequirements2>::zeroed();
-        {
-            {
-                let requirements = requirements.as_mut_ptr().as_mut().unwrap();
-                requirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
-            }
-            let memory_info = VkAccelerationStructureMemoryRequirementsInfoKHR {
-                sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_KHR,
+    fn new(
+        device: &Arc<Device>,
+        structure_size: VkDeviceSize, 
+        structure_type: VkAccelerationStructureTypeKHR,
+    ) -> Arc<Self> {
+        unsafe {
+            let buffer_memory = AccelerationStructureBufferMemory::new(device, structure_size);
+            let create_info = VkAccelerationStructureCreateInfoKHR {
+                sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
                 pNext: ptr::null(),
-                r#type: VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_OBJECT_KHR,
-                accelerationStructure: structure_handle,
-                buildType: VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+                createFlags: 0,
+                buffer: buffer_memory.buffer(),
+                offset: 0,
+                size: structure_size,
+                r#type: structure_type,
+                deviceAddress: 0,
             };
-            vkGetAccelerationStructureMemoryRequirementsKHR(device.handle(), &memory_info, requirements.as_mut_ptr());
-        }
-        let requirements = requirements.assume_init();
-        // allocate memory
-        let mut memory = MaybeUninit::<VkDeviceMemory>::zeroed();
-        {
-            let memory_type_index = device.physical_device()
-                .memory_type_index(&requirements.memoryRequirements, 
-                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags)
-                .ok_or_else(|| ErrorCode::SuitableBufferMemoryTypeNotFound)
-                .unwrap();
-            let allocate_flags_info = VkMemoryAllocateFlagsInfo {
-                sType: VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
-                pNext: ptr::null(),
-                flags: VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT as VkMemoryAllocateFlags,
-                deviceMask: 0,
-            };
-            let allocate_info = VkMemoryAllocateInfo {
-                sType: VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-                pNext: &allocate_flags_info as *const _ as *const c_void,
-                allocationSize: requirements.memoryRequirements.size,
-                memoryTypeIndex: memory_type_index,
-            };
-            vkAllocateMemory(device.handle(), &allocate_info, ptr::null(), memory.as_mut_ptr())
+            let mut handle = MaybeUninit::<VkAccelerationStructureKHR>::zeroed();
+            vkCreateAccelerationStructureKHR(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
                 .into_result()
                 .unwrap();
-        }
-        let memory = memory.assume_init();
-        // bind memory
-        {
-            let bind_info = VkBindAccelerationStructureMemoryInfoKHR {
-                sType: VK_STRUCTURE_TYPE_BIND_ACCELERATION_STRUCTURE_MEMORY_INFO_KHR,
-                pNext: ptr::null(),
-                accelerationStructure: structure_handle,
-                memory: memory,
-                memoryOffset: 0,
-                deviceIndexCount: 0,
-                pDeviceIndices: ptr::null(),
+            let handle = handle.assume_init();
+            let structure = Self {
+                handle,
+                buffer_memory,
+                device: Arc::clone(device),
             };
-            vkBindAccelerationStructureMemoryKHR(device.handle(), 1, &bind_info)
-                .into_result()
-                .unwrap();
+            Arc::new(structure)
         }
-        let structure = AccelerationStructure {
-            device: Arc::clone(device),
-            handle: structure_handle,
-            memory,
-            memory_requirements: requirements,
-        };
-        Ok(Arc::new(structure))
     }
 
-    #[inline]
-    pub fn handle(&self) -> VkAccelerationStructureKHR {
+    fn handle(&self) -> VkAccelerationStructureKHR {
         self.handle
     }
 
-    pub fn device_address(&self) -> VkDeviceAddress {
-        unsafe {
-            let info = VkAccelerationStructureDeviceAddressInfoKHR {
-                sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
-                pNext: ptr::null(),
-                accelerationStructure: self.handle,
-            };
-            vkGetAccelerationStructureDeviceAddressKHR(self.device.handle(), &info)
-        }
-    }
-
-    fn memory_requirements(&self) -> &VkMemoryRequirements2 {
-        &self.memory_requirements
-    }
-
-    fn scratch_memory_requirements(&self) -> VkMemoryRequirements2 {
-        let mut requirements = MaybeUninit::<VkMemoryRequirements2>::zeroed();
-        unsafe {
-            {
-                let requirements = requirements.as_mut_ptr().as_mut().unwrap();
-                requirements.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2;
-            }
-            let memory_info = VkAccelerationStructureMemoryRequirementsInfoKHR {
-                sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_KHR,
-                pNext: ptr::null(),
-                r#type: VK_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_TYPE_BUILD_SCRATCH_KHR,
-                accelerationStructure: self.handle(),
-                buildType: VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
-            };
-            vkGetAccelerationStructureMemoryRequirementsKHR(self.device.handle(), &memory_info, requirements.as_mut_ptr());
-            requirements.assume_init()
-        }
+    fn device(&self) -> &Arc<Device> {
+        &self.device
     }
 }
 
 impl Drop for AccelerationStructure {
     fn drop(&mut self) {
         unsafe {
-            log_debug!("Drop AccelerationStructure");
             vkDestroyAccelerationStructureKHR(self.device.handle(), self.handle, ptr::null());
-            vkFreeMemory(self.device.handle(), self.memory, ptr::null());
         }
     }
 }
+
+// represents the method to build a structure
+pub struct BottomLevelAccelerationStructureBuild {
+    geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+}
+
+impl BottomLevelAccelerationStructureBuild {
+    pub fn new(
+        geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+    ) -> Self {
+        Self {
+            geometries,
+        }
+    }
+
+    fn geometries(&self) -> &Vec<Arc<BottomLevelAccelerationStructureGeometry>> {
+        &self.geometries
+    }
+
+    unsafe fn build(&self,
+        recording: &CommandBufferRecording,
+    ) -> BottomLevelAccelerationStructureBuildProcess {
+        use VkAccelerationStructureTypeKHR::*;
+        use VkBufferUsageFlagBits::*;
+        use VkMemoryPropertyFlagBits::*;
+        use VkBuildAccelerationStructureFlagBitsKHR::*;
+        use VkBuildAccelerationStructureModeKHR::*;
+        let geometries = self.geometries();
+        let geometries_vec: Vec<VkAccelerationStructureGeometryKHR> = geometries.iter()
+            .map(|v| v.geometry())
+            .collect();
+        // pMaxPrimitiveCounts is a pointer to an array of pBuildInfo->geometryCount uint32_t values 
+        // defining the number of primitives built into each geometry.
+        let max_primitive_count_vec: Vec<u32> = geometries.iter()
+            .map(|v| v.max_primitive_count())
+            .collect();
+        let device = recording.command_pool().queue().device();
+        let sizes_info = Self::make_sizes_info(
+            device, 
+            &geometries_vec, 
+            &max_primitive_count_vec,
+        );
+        let structure = AccelerationStructure::new(
+            device, 
+            sizes_info.accelerationStructureSize, 
+            VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+        );
+        let scratch_buffer_memory = DedicatedBufferMemory::new(
+            device, 
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as VkBufferUsageFlags
+                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags, 
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            sizes_info.buildScratchSize,
+        )
+            .unwrap();
+        let build_info = VkAccelerationStructureBuildGeometryInfoKHR {
+            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+            pNext: ptr::null(),
+            r#type: VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+            flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkBuildAccelerationStructureFlagsKHR,
+            mode: VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+            srcAccelerationStructure: ptr::null_mut(),
+            dstAccelerationStructure: structure.handle(),
+            geometryCount: geometries_vec.len() as u32,
+            pGeometries: geometries_vec.as_ptr(),
+            ppGeometries: ptr::null(),
+            scratchData: VkDeviceOrHostAddressKHR {
+                deviceAddress: scratch_buffer_memory.buffer_device_address(),
+            },
+        };
+        let range_info_vec: Vec<VkAccelerationStructureBuildRangeInfoKHR> = geometries.iter()
+            .map(|v| v.range_info())
+            .collect();
+        let range_info_vec_vec: Vec<*const VkAccelerationStructureBuildRangeInfoKHR> = vec![range_info_vec.as_ptr()];
+        dispatch_vkCmdBuildAccelerationStructuresKHR(
+            device.handle(), 
+            recording.command_buffer(),
+            1,
+            &build_info,
+            range_info_vec_vec.as_ptr(),
+        );
+        BottomLevelAccelerationStructureBuildProcess::new(self.geometries.clone(), structure, scratch_buffer_memory)
+    }
+
+    unsafe fn make_sizes_info(
+        device: &Arc<Device>,
+        geometries_vec: &Vec<VkAccelerationStructureGeometryKHR>, 
+        max_primitive_count_vec: &Vec<u32>
+    ) -> VkAccelerationStructureBuildSizesInfoKHR {
+        use VkAccelerationStructureTypeKHR::*;
+        use VkBuildAccelerationStructureFlagBitsKHR::*;
+        use VkBuildAccelerationStructureModeKHR::*;
+        use VkAccelerationStructureBuildTypeKHR::*;
+        let build_info = VkAccelerationStructureBuildGeometryInfoKHR {
+            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+            pNext: ptr::null(),
+            r#type: VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+            flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkBuildAccelerationStructureFlagsKHR,
+            mode: VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+            srcAccelerationStructure: ptr::null_mut(),
+            dstAccelerationStructure: ptr::null_mut(),
+            geometryCount: geometries_vec.len() as u32,
+            pGeometries: geometries_vec.as_ptr(),
+            ppGeometries: ptr::null(),
+            scratchData: VkDeviceOrHostAddressKHR {
+                deviceAddress: 0,
+            },
+        };
+        let mut sizes_info = MaybeUninit::<VkAccelerationStructureBuildSizesInfoKHR>::zeroed();
+        {
+            let sizes_info = &mut *sizes_info.as_mut_ptr();
+            sizes_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+        }
+        vkGetAccelerationStructureBuildSizesKHR(
+            device.handle(), 
+            VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+            &build_info,
+            max_primitive_count_vec.as_ptr(),
+            sizes_info.as_mut_ptr(),
+        );
+        let sizes_info = sizes_info.assume_init();
+        sizes_info
+    }
+}
+
+struct BottomLevelAccelerationStructureBuildProcess {
+    geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+    structure: Arc<AccelerationStructure>,
+    scratch: Arc<DedicatedBufferMemory>,
+}
+
+impl BottomLevelAccelerationStructureBuildProcess {
+    fn new(
+        geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+        structure: Arc<AccelerationStructure>,
+        scratch: Arc<DedicatedBufferMemory>,
+    ) -> Self {
+        let building = Self {
+            geometries,
+            structure,
+            scratch,
+        };
+        building
+    }
+
+    fn complete(self) -> Arc<BottomLevelAccelerationStructure> {
+        BottomLevelAccelerationStructure::new(self.geometries, self.structure)
+    }
+}
+
+// represents a complete built structure
+pub struct BottomLevelAccelerationStructure {
+    geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+    structure: Arc<AccelerationStructure>,
+    device_address: VkDeviceAddress,
+}
+
+impl BottomLevelAccelerationStructure {
+    fn new(
+        geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+        structure: Arc<AccelerationStructure>,
+    ) -> Arc<Self> {
+        let device = structure.device();
+        // device address is unknown until its build process completes
+        let device_address = {
+            let info = VkAccelerationStructureDeviceAddressInfoKHR {
+                sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
+                pNext: ptr::null(),
+                accelerationStructure: structure.handle,
+            };
+            vkGetAccelerationStructureDeviceAddressKHR(device.handle(), &info)
+        };
+        let structure = Self {
+            geometries,
+            structure,
+            device_address,
+        };
+        Arc::new(structure)
+    }
+
+    #[inline]
+    pub fn handle(&self) -> VkAccelerationStructureKHR {
+        self.structure.handle()
+    }
+
+    pub fn device_address(&self) -> VkDeviceAddress {
+        self.device_address
+    }
+}
+
+pub struct BottomLevelAccelerationStructuresBuilder<'a> {
+    command_pool: &'a Arc<CommandPool>, 
+    builds: &'a Vec<BottomLevelAccelerationStructureBuild>,
+}
+
+impl<'a> BottomLevelAccelerationStructuresBuilder<'a> {
+    // creates bulk of structures
+    pub fn new(
+        command_pool: &'a Arc<CommandPool>, 
+        builds: &'a Vec<BottomLevelAccelerationStructureBuild>,
+    ) -> Self {
+        Self {
+            command_pool,
+            builds,
+        }
+    }
+
+    pub fn build(self) -> Vec<Arc<BottomLevelAccelerationStructure>> {
+        let command_pool = self.command_pool;
+        let builds = self.builds;
+        unsafe {
+            // TODO: optimize across multiple builds
+            let recording = CommandBufferRecording::new_onetime_submit(command_pool)
+                .unwrap();
+            let processes: Vec<_> = builds.into_iter()
+                .map(|v| v.build(&recording))
+                .collect();
+            let command_buffer = recording.complete();
+            let command_buffer_vec = vec![command_buffer.handle()];
+            command_pool.queue()
+                .submit_then_wait(&command_buffer_vec)
+                .unwrap();
+            // discards scratch buffers once it completes
+            let blas_vec: Vec<_> = processes.into_iter()
+                .map(|v| v.complete())
+                .collect();
+            blas_vec
+        }
+    }
+}
+
+
 
 pub struct TopLevelAccelerationStructureInstance {
     instance_custom_index: u32,
@@ -622,12 +578,25 @@ impl TopLevelAccelerationStructureInstance {
     fn hit_group(&self) -> u32 {
         self.hit_group
     }
+
+    fn instance_struct(&self) -> VkAccelerationStructureInstanceKHR {
+        use VkGeometryInstanceFlagBitsKHR::*;
+        VkAccelerationStructureInstanceKHR {
+            transform: self.transform.clone(),
+            instanceCustomIndexAndMask: (0xff << 24) | (self.instance_custom_index() & ((1u32 << 25) - 1)),
+            instanceShaderBindingTableRecordOffsetAndFlags: 
+                ((VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR as VkFlags) << 24)
+                    | (self.hit_group() & 0xff),
+            accelerationStructureReference: self.bottom_level_acceleration_structure().device_address(),
+        }
+    }
 }
 
 pub struct TopLevelAccelerationStructure {
     instances_buffer: Arc<DedicatedStagingBuffer>,
     structure: Arc<AccelerationStructure>,
     instances: Vec<Arc<TopLevelAccelerationStructureInstance>>,
+    device_address: VkDeviceAddress,
 }
 
 impl TopLevelAccelerationStructure {
@@ -635,132 +604,166 @@ impl TopLevelAccelerationStructure {
         command_pool: &Arc<CommandPool>, 
         instances: Vec<Arc<TopLevelAccelerationStructureInstance>>,
     ) -> Result<Arc<Self>> {
+        use VkBufferUsageFlagBits::*;
+        use VkMemoryPropertyFlagBits::*;
+        use VkGeometryFlagBitsKHR::*;
+        use VkAccelerationStructureTypeKHR::*;
+        use VkBuildAccelerationStructureFlagBitsKHR::*;
+        use VkBuildAccelerationStructureModeKHR::*;
         unsafe {
-            Self::init(command_pool, instances)
-        }
-    }
-
-    unsafe fn init(
-        command_pool: &Arc<CommandPool>, 
-        instances: Vec<Arc<TopLevelAccelerationStructureInstance>>,
-    ) -> Result<Arc<Self>> {
-        let device = command_pool.queue().device();
-        let type_info = VkAccelerationStructureCreateGeometryTypeInfoKHR {
-            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_GEOMETRY_TYPE_INFO_KHR,
-            pNext: ptr::null(),
-            geometryType: VkGeometryTypeKHR::VK_GEOMETRY_TYPE_INSTANCES_KHR,
-            maxPrimitiveCount: instances.len() as u32,
-            indexType: VkIndexType::VK_INDEX_TYPE_UINT16,
-            maxVertexCount: 0,
-            vertexFormat: VkFormat::VK_FORMAT_UNDEFINED,
-            allowsTransforms: VK_FALSE,
-        };
-        let create_info = VkAccelerationStructureCreateInfoKHR {
-            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR,
-            pNext: ptr::null(),
-            compactedSize: 0,
-            r#type: VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-            flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkFlags,
-            maxGeometryCount: 1,
-            pGeometryInfos: &type_info,
-            deviceAddress: 0,
-        };
-        let structure = AccelerationStructure::new(device, &create_info)
-            .unwrap();
-        let instance_structs: Vec<_> = instances.iter()
-            .map(|instance| {
-                let custom_index = instance.instance_custom_index();
-                let structure = instance.bottom_level_acceleration_structure();
-                let transform = instance.transform();
-                let hit_group = instance.hit_group();
-                let instance = VkAccelerationStructureInstanceKHR {
-                    transform: transform,
-                    instanceCustomIndexAndMask: (0xff << 24) | (custom_index & ((1u32 << 25) - 1)),
-                    instanceShaderBindingTableRecordOffsetAndFlags: 
-                        ((VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR as VkFlags) << 24)
-                            | (hit_group & 0xff),
-                    accelerationStructureReference: structure.structure_device_address(),
-                };
-                instance
-            })
-            .collect();
-        let instances_size = instance_structs.len() * std::mem::size_of::<VkAccelerationStructureInstanceKHR>();
-        let instances_buffer = DedicatedStagingBuffer::new(command_pool, 
-            VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags, 
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-            instances_size as VkDeviceSize)
-            .unwrap();
-        instances_buffer.write(instance_structs.as_ptr() as *const c_void, instances_size);
-        // build
-        {
-            let geometry_instances = VkAccelerationStructureGeometryInstancesDataKHR {
-                sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
-                pNext: ptr::null(),
-                arrayOfPointers: VK_FALSE,
-                data: instances_buffer.device_buffer_memory().buffer_device_address(),
-            };
-            let geometry_data = VkAccelerationStructureGeometryDataKHR {
-                instances: geometry_instances,
-            };
+            // sends instance structs to the GPU
+            let instance_structs: Vec<VkAccelerationStructureInstanceKHR> = instances.iter()
+                .map(|v| v.instance_struct())
+                .collect();
+            let instances_size = instance_structs.len() * std::mem::size_of::<VkAccelerationStructureInstanceKHR>();
+            let instances_buffer = DedicatedStagingBuffer::new(
+                command_pool, 
+                VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags
+                    | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR as VkBufferUsageFlags, 
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+                instances_size as VkDeviceSize,
+            )
+                .unwrap();
+            // TODO: optimize (write blocks)
+            instances_buffer.write(instance_structs.as_ptr() as *const c_void, instances_size);
+            // build info construction
             let geometry = VkAccelerationStructureGeometryKHR {
                 sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
                 pNext: ptr::null(),
-                flags: VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR as VkGeometryFlagsKHR,
                 geometryType: VkGeometryTypeKHR::VK_GEOMETRY_TYPE_INSTANCES_KHR,
-                geometry: geometry_data,
+                geometry: VkAccelerationStructureGeometryDataKHR {
+                    instances: VkAccelerationStructureGeometryInstancesDataKHR {
+                        sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
+                        pNext: ptr::null(),
+                        arrayOfPointers: VK_FALSE,
+                        data: VkDeviceOrHostAddressConstKHR {
+                            deviceAddress: instances_buffer.device_buffer_memory().buffer_device_address(),
+                        },
+                    },
+                },
+                flags: VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR as VkGeometryFlagsKHR,
             };
-            let geometry_vec = vec![geometry];
-            let scratch_size = structure.scratch_memory_requirements()
-                .memoryRequirements.size;
+            let device = command_pool.queue().device();
+            let geometries_vec = vec![geometry];
+            let max_primitive_count_vec = vec![instance_structs.len() as u32];
+            let sizes_info = Self::make_sizes_info(device, &geometries_vec, &max_primitive_count_vec);
+            let structure = AccelerationStructure::new(
+                device, 
+                sizes_info.accelerationStructureSize, 
+                VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+            );
             let scratch_buffer_memory = DedicatedBufferMemory::new(
                 device, 
-                VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR as VkBufferUsageFlags
-                    | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as VkBufferUsageFlags
+                    | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags, 
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-                scratch_size)
+                sizes_info.buildScratchSize,
+            )
                 .unwrap();
             let build_info = VkAccelerationStructureBuildGeometryInfoKHR {
                 sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
                 pNext: ptr::null(),
                 r#type: VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-                flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkFlags,
-                update: VK_FALSE,
+                flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkBuildAccelerationStructureFlagsKHR,
+                mode: VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
                 srcAccelerationStructure: ptr::null_mut(),
                 dstAccelerationStructure: structure.handle(),
-                geometryArrayOfPointers: VK_FALSE,
-                geometryCount: 1,
-                ppGeometries: &geometry_vec.as_ptr() ,
-                scratchData: scratch_buffer_memory.buffer_device_address(),
+                geometryCount: geometries_vec.len() as u32,
+                pGeometries: geometries_vec.as_ptr(),
+                ppGeometries: ptr::null(),
+                scratchData: VkDeviceOrHostAddressKHR {
+                    deviceAddress: scratch_buffer_memory.buffer_device_address(),
+                },
             };
-            let offset = VkAccelerationStructureBuildOffsetInfoKHR {
-                primitiveCount: instances.len() as u32,
+            let range_info = VkAccelerationStructureBuildRangeInfoKHR {
+                primitiveCount: instance_structs.len() as u32,
                 primitiveOffset: 0,
                 firstVertex: 0,
                 transformOffset: 0,
             };
-            let offset_ptr_vec = vec![&offset as *const VkAccelerationStructureBuildOffsetInfoKHR];
-            let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
-                dispatch_vkCmdBuildAccelerationStructureKHR(device.handle(), 
-                    command_buffer, 1, &build_info, offset_ptr_vec.as_ptr());
-            });
-            let command_buffers = vec![command_buffer.handle()];
-            command_pool.queue()
-                .submit_then_wait(command_buffers.as_slice())
+            let range_info_vec = vec![range_info];
+            let range_info_vec_vec: Vec<*const VkAccelerationStructureBuildRangeInfoKHR> = vec![range_info_vec.as_ptr()];
+            // command dispatch
+            let recording = CommandBufferRecording::new_onetime_submit(command_pool)
                 .unwrap();
+            dispatch_vkCmdBuildAccelerationStructuresKHR(
+                device.handle(), 
+                recording.command_buffer(),
+                1,
+                &build_info,
+                range_info_vec_vec.as_ptr(),
+            );
+            let command_buffer = recording.complete();
+            let command_buffer_vec = vec![command_buffer.handle()];
+            command_pool.queue()
+                .submit_then_wait(&command_buffer_vec)
+                .unwrap();
+            // device address is unknown until its build process completes
+            let device_address = {
+                let info = VkAccelerationStructureDeviceAddressInfoKHR {
+                    sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR,
+                    pNext: ptr::null(),
+                    accelerationStructure: structure.handle,
+                };
+                vkGetAccelerationStructureDeviceAddressKHR(device.handle(), &info)
+            };
+            let structure = Self {
+                instances_buffer,
+                instances,
+                structure,
+                device_address,
+            };
+            Ok(Arc::new(structure))
         }
-        let top_level_structure = TopLevelAccelerationStructure {
-            instances_buffer,
-            structure,
-            instances,
-        };
-        Ok(Arc::new(top_level_structure))
     }
 
     #[inline]
     pub fn handle(&self) -> VkAccelerationStructureKHR {
         self.structure.handle()
     }
+
+    unsafe fn make_sizes_info(
+        device: &Arc<Device>,
+        geometries_vec: &Vec<VkAccelerationStructureGeometryKHR>, 
+        max_primitive_count_vec: &Vec<u32>,
+    ) -> VkAccelerationStructureBuildSizesInfoKHR {
+        use VkAccelerationStructureTypeKHR::*;
+        use VkBuildAccelerationStructureFlagBitsKHR::*;
+        use VkBuildAccelerationStructureModeKHR::*;
+        use VkAccelerationStructureBuildTypeKHR::*;
+        let build_info = VkAccelerationStructureBuildGeometryInfoKHR {
+            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+            pNext: ptr::null(),
+            r#type: VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+            flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkBuildAccelerationStructureFlagsKHR,
+            mode: VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+            srcAccelerationStructure: ptr::null_mut(),
+            dstAccelerationStructure: ptr::null_mut(),
+            geometryCount: geometries_vec.len() as u32,
+            pGeometries: geometries_vec.as_ptr(),
+            ppGeometries: ptr::null(),
+            scratchData: VkDeviceOrHostAddressKHR {
+                deviceAddress: 0,
+            },
+        };
+        let mut sizes_info = MaybeUninit::<VkAccelerationStructureBuildSizesInfoKHR>::zeroed();
+        {
+            let sizes_info = &mut *sizes_info.as_mut_ptr();
+            sizes_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+        }
+        vkGetAccelerationStructureBuildSizesKHR(
+            device.handle(), 
+            VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+            &build_info,
+            max_primitive_count_vec.as_ptr(),
+            sizes_info.as_mut_ptr(),
+        );
+        let sizes_info = sizes_info.assume_init();
+        sizes_info
+    }
 }
+
+
 
 
 pub struct RayTracingGraphicsPipeline {
@@ -768,6 +771,7 @@ pub struct RayTracingGraphicsPipeline {
     layout: VkPipelineLayout,
     handle: VkPipeline,
     descriptor_set_layout: VkDescriptorSetLayout,
+    shader_group_count: u32,
 }
 
 impl RayTracingGraphicsPipeline {
@@ -1012,12 +1016,6 @@ impl RayTracingGraphicsPipeline {
                 pShaderGroupCaptureReplayHandle: ptr::null(),
             },
         ];
-        let libraries = VkPipelineLibraryCreateInfoKHR {
-            sType: VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR,
-            pNext: ptr::null(),
-            libraryCount: 0,
-            pLibraries: ptr::null(),
-        };
         // allows casting a shadow ray from the closest hit shader
         let max_recursion_depth = 2;
         let create_info = VkRayTracingPipelineCreateInfoKHR {
@@ -1028,15 +1026,16 @@ impl RayTracingGraphicsPipeline {
             pStages: shader_stages.as_ptr(),
             groupCount: shader_groups.len() as u32,
             pGroups: shader_groups.as_ptr(),
-            maxRecursionDepth: max_recursion_depth,
-            libraries: libraries,
+            maxPipelineRayRecursionDepth: max_recursion_depth,
+            pLibraryInfo: ptr::null(),
             pLibraryInterface: ptr::null(),
+            pDynamicState: ptr::null(),
             layout: pipeline_layout,
             basePipelineHandle: ptr::null_mut(),
             basePipelineIndex: 0,
         };
         let mut handle = MaybeUninit::<VkPipeline>::zeroed();
-        vkCreateRayTracingPipelinesKHR(device.handle(), ptr::null_mut(), 1, &create_info, ptr::null(), handle.as_mut_ptr())
+        vkCreateRayTracingPipelinesKHR(device.handle(), ptr::null_mut(), ptr::null_mut(), 1, &create_info, ptr::null(), handle.as_mut_ptr())
             .into_result()
             .unwrap();
         let handle = handle.assume_init();
@@ -1045,6 +1044,7 @@ impl RayTracingGraphicsPipeline {
             layout: pipeline_layout,
             handle,
             descriptor_set_layout,
+            shader_group_count: shader_groups.len() as u32,
         };
         Ok(Arc::new(layout))
     }
@@ -1067,6 +1067,10 @@ impl RayTracingGraphicsPipeline {
     #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
+    }
+
+    pub fn shader_group_count(&self) -> u32 {
+        self.shader_group_count
     }
 }
 
@@ -1374,12 +1378,12 @@ impl Drop for RayTracingDescriptorSets {
 }
 
 pub struct ShaderBindingTable {
-    staging_buffer: Arc<DedicatedStagingBuffer>,
+    storage_buffer: Arc<DedicatedStagingBuffer>,
     pipeline: Arc<RayTracingGraphicsPipeline>,
-    raygen_entry: VkStridedBufferRegionKHR,
-    miss_entry: VkStridedBufferRegionKHR,
-    hit_entry: VkStridedBufferRegionKHR,
-    callable_entry: VkStridedBufferRegionKHR,
+    raygen_entry: VkStridedDeviceAddressRegionKHR,
+    miss_entry: VkStridedDeviceAddressRegionKHR,
+    hit_entry: VkStridedDeviceAddressRegionKHR,
+    callable_entry: VkStridedDeviceAddressRegionKHR,
 }
 
 impl ShaderBindingTable {
@@ -1390,60 +1394,73 @@ impl ShaderBindingTable {
     }
 
     unsafe fn init(command_pool: &Arc<CommandPool>, pipeline: &Arc<RayTracingGraphicsPipeline>) -> Result<Arc<Self>> {
+        use VkBufferUsageFlagBits::*;
+        use VkMemoryPropertyFlagBits::*;
         let device = command_pool.queue().device();
-        let num_shader_groups = 5usize;
+        // | RAYGEN |
+        // | MISS |
+        // | MISS (SHADOW) |
+        // | HIT (TRIANGLE) |
+        // | HIT (PROCEDURAL) |
+        let group_count = pipeline.shader_group_count();
         let properties = device.physical_device().properties_ray_tracing();
-        let table_size = (properties.shaderGroupBaseAlignment as VkDeviceSize) * (num_shader_groups as VkDeviceSize);
-        let staging_buffer = DedicatedStagingBuffer::new(command_pool, 
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT as VkBufferUsageFlags 
-                | VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR as VkBufferUsageFlags,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-            table_size)
-            .unwrap();
-        staging_buffer.update(table_size, |buffer_data| {
+        let group_handle_size = properties.shaderGroupHandleSize;
+        let group_size_aligned = Self::aligned_size(properties.shaderGroupHandleSize, properties.shaderGroupBaseAlignment);
+        let table_size = (group_size_aligned * group_count) as VkDeviceSize;
+        let buffer_flags = VK_BUFFER_USAGE_TRANSFER_SRC_BIT as VkBufferUsageFlags 
+            | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags
+            | VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR as VkBufferUsageFlags;
+        let memory_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags;
+        let storage_buffer = DedicatedStagingBuffer::new(
+            command_pool, 
+            buffer_flags,
+            memory_flags,
+            table_size,
+        ).unwrap();
+        storage_buffer.update(table_size, |buffer_data| {
             let buffer_data = buffer_data as *mut u8;
-            let data_size = properties.shaderGroupHandleSize as usize * num_shader_groups;
             let mut data: Vec<u8> = vec![];
-            data.resize(data_size, 0);
-            vkGetRayTracingShaderGroupHandlesKHR(device.handle(), 
+            let data_size = group_handle_size * group_count;
+            data.resize(data_size as usize, 0);
+            vkGetRayTracingShaderGroupHandlesKHR(
+                device.handle(), 
                 pipeline.handle(), 
-                0, 
-                num_shader_groups as u32, 
+                0,
+                group_count,
                 data_size as size_t, 
-                data.as_mut_ptr() as *mut c_void)
+                data.as_mut_ptr() as *mut c_void,
+            )
                 .into_result()
                 .unwrap();
-            for i in 0..(num_shader_groups as isize) {
-                let src_offset = i * properties.shaderGroupHandleSize as isize;
-                let dst_offset = i * properties.shaderGroupBaseAlignment as isize;
+            for i in 0..(group_count as isize) {
+                let src_offset = i * group_handle_size as isize;
+                let dst_offset = i * group_size_aligned as isize;
                 let src = data.as_mut_ptr().offset(src_offset);
                 let dst = buffer_data.offset(dst_offset);
-                std::ptr::copy_nonoverlapping(src, dst, properties.shaderGroupHandleSize as usize);
+                ptr::copy_nonoverlapping(src, dst, group_handle_size as usize);
             }
         });
         // buffer region calculation
-        let alignment = properties.shaderGroupBaseAlignment as VkDeviceSize;
-        let raygen_entry = VkStridedBufferRegionKHR {
-            buffer: staging_buffer.device_buffer_memory().buffer(),
-            offset: alignment * 0,
-            stride: alignment,
-            size: table_size,
+        let group_size = group_size_aligned as VkDeviceSize;
+        let base_device_address = storage_buffer.device_buffer_memory().buffer_device_address();
+        let raygen_entry = VkStridedDeviceAddressRegionKHR {
+            deviceAddress: base_device_address + 0 * group_size,
+            stride: group_size,
+            size: group_size,
         };
-        let miss_entry = VkStridedBufferRegionKHR {
-            buffer: staging_buffer.device_buffer_memory().buffer(),
-            offset: alignment * 1,
-            stride: alignment,
-            size: table_size,
+        let miss_entry = VkStridedDeviceAddressRegionKHR {
+            deviceAddress: base_device_address + 1 * group_size,
+            stride: group_size,
+            size: group_size * 2,
         };
-        let hit_entry = VkStridedBufferRegionKHR {
-            buffer: staging_buffer.device_buffer_memory().buffer(),
-            offset: alignment * 3,
-            stride: alignment,
-            size: table_size,
+        let hit_entry = VkStridedDeviceAddressRegionKHR {
+            deviceAddress: base_device_address + 3 * group_size,
+            stride: group_size,
+            size: group_size * 2,
         };
-        let callable_entry = VkStridedBufferRegionKHR::default();
+        let callable_entry = VkStridedDeviceAddressRegionKHR::default();
         let table = Self {
-            staging_buffer,
+            storage_buffer,
             pipeline: Arc::clone(pipeline),
             raygen_entry,
             miss_entry,
@@ -1454,23 +1471,30 @@ impl ShaderBindingTable {
     }
 
     #[inline]
-    fn raygen_entry(&self) -> &VkStridedBufferRegionKHR {
+    fn raygen_entry(&self) -> &VkStridedDeviceAddressRegionKHR {
         &self.raygen_entry
     }
 
     #[inline]
-    fn miss_entry(&self) -> &VkStridedBufferRegionKHR {
+    fn miss_entry(&self) -> &VkStridedDeviceAddressRegionKHR {
         &self.miss_entry
     }
 
     #[inline]
-    fn hit_entry(&self) -> &VkStridedBufferRegionKHR {
+    fn hit_entry(&self) -> &VkStridedDeviceAddressRegionKHR {
         &self.hit_entry
     }
 
     #[inline]
-    fn callable_entry(&self) -> &VkStridedBufferRegionKHR {
+    fn callable_entry(&self) -> &VkStridedDeviceAddressRegionKHR {
         &self.callable_entry
+    }
+
+    // @see https://nvpro-samples.github.io/vk_raytracing_tutorial_KHR/
+    // Size and Alignment Gotcha
+    // alignedSize=[size+(alignment−1)] & ~(alignment−1)
+    fn aligned_size(size: u32, alignment: u32) -> u32 {
+        (size + alignment - 1) & !(alignment - 1)
     }
 }
 

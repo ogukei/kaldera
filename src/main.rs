@@ -87,6 +87,7 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
         .unwrap();
     let raytracing_pipeline = RayTracingGraphicsPipeline::new(device_queues.device(), scene.textures().len())
         .unwrap();
+    let dummy_staging_buffer = scene.texcoord_staging_buffer();
     let descriptor_sets = RayTracingDescriptorSets::new(
         &raytracing_pipeline, 
         scene.top_level_acceleration_structure(), 
@@ -98,8 +99,8 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
         scene.description_staging_buffer(),
         scene.texcoord_staging_buffer(),
         scene.textures(),
-        scene.sphere_staging_buffer(),
-        scene.material_staging_buffer(),
+        dummy_staging_buffer,
+        dummy_staging_buffer,
         scene.material_description_staging_buffer(),
         scene.tangent_staging_buffer(),
     )

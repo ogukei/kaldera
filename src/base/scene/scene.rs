@@ -59,7 +59,6 @@ pub struct Scene {
     top_level_acceleration_structure: Arc<TopLevelAccelerationStructure>,
     materials: Vec<Arc<SceneMeshMaterial>>,
     textures: Vec<Arc<Texture>>,
-    procedural: Arc<SceneProceduralGeometry>,
 }
 
 impl Scene {
@@ -79,29 +78,16 @@ impl Scene {
             .map(|v| v.structure_geometry())
             .map(Arc::clone)
             .collect();
-        let builder = BottomLevelAccelerationStructuresBuilder::new(command_pool, &geometries);
-        let structures = builder.build().unwrap();
+        let builds = geometries.into_iter()
+            .map(|v| BottomLevelAccelerationStructureBuild::new(vec![v]))
+            .collect();
+        let builder = BottomLevelAccelerationStructuresBuilder::new(command_pool, &builds);
+        let structures = builder.build();
         let scene_mesh_primitives: Vec<_> = structures.into_iter()
             .zip(scene_mesh_primitive_geometries.into_iter())
             .map(|(structure, geometry)| SceneMeshPrimitive::new(geometry, structure))
             .collect();
         log_debug!("building blas complete");
-        log_debug!("building blas procedurals");
-        let spheres = vec![
-            glm::vec4(0.0, 1.0, 0.0, 1.0), 
-            glm::vec4(-4.0, 1.0, 0.0, 1.0),
-            glm::vec4(4.0, 1.0, 0.0, 1.0),
-        ];
-        let sphere_materials = vec![
-            SphereMaterial::dielectric(), 
-            SphereMaterial::metal(0.7, 0.6, 0.5, 0.0), 
-            SphereMaterial::lambertian(0.7, 0.6, 0.5),
-        ];
-        let aabbs: Vec<_> = spheres.iter()
-            .map(|v| AABB::sphere(&v.xyz(), v.w))
-            .collect();
-        let procedural = SceneProceduralGeometry::new(&aabbs, &spheres, &sphere_materials, command_pool).unwrap();
-        log_debug!("building blas procedurals complete");
         log_debug!("building tlas");
         let node_scale: f32 = 1.0;
         let node_scale = glm::scaling(&glm::vec3(node_scale, node_scale, node_scale));
@@ -126,27 +112,7 @@ impl Scene {
                 ).unwrap();
                 instance
             });
-        let procedural_instances = procedural.structures().iter()
-            .take(0)
-            .enumerate()
-            .map(|(index, structure)| {
-                let transform = VkTransformMatrixKHR {
-                    matrix: [
-                        [1.0, 0.0, 0.0, 0.0,],
-                        [0.0, 1.0, 0.0, 0.0,],
-                        [0.0, 0.0, 1.0, 0.0,],
-                    ]
-                };
-                let instance = TopLevelAccelerationStructureInstance::new(
-                    index as u32,
-                    transform,
-                    1,
-                    structure,
-                ).unwrap();
-                instance
-            });
         let instances = node_instances
-            .chain(procedural_instances)
             .collect();
         let top_level_acceleration_structure = TopLevelAccelerationStructure::new(command_pool, instances)
             .unwrap();
@@ -158,7 +124,6 @@ impl Scene {
             top_level_acceleration_structure,
             materials: descriptions_textures.materials,
             textures: descriptions_textures.textures,
-            procedural,
         }
     }
 
@@ -196,14 +161,6 @@ impl Scene {
 
     pub fn textures(&self) -> &Vec<Arc<Texture>> {
         &self.textures
-    }
-
-    pub fn sphere_staging_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
-        &self.procedural.sphere_buffer()
-    }
-
-    pub fn material_staging_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
-        &self.procedural.sphere_material_buffer()
     }
 }
 

@@ -832,11 +832,20 @@ pub enum VkBufferUsageFlagBits {
     VK_BUFFER_USAGE_INDEX_BUFFER_BIT = 0x00000040,
     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT = 0x00000080,
     VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT = 0x00000100,
+  // Provided by VK_VERSION_1_2
     VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT = 0x00020000,
+  // Provided by VK_EXT_transform_feedback
     VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT = 0x00000800,
+  // Provided by VK_EXT_transform_feedback
     VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT = 0x00001000,
+  // Provided by VK_EXT_conditional_rendering
     VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT = 0x00000200,
-    VK_BUFFER_USAGE_RAY_TRACING_BIT_KHR = 0x00000400,
+  // Provided by VK_KHR_acceleration_structure
+    VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR = 0x00080000,
+  // Provided by VK_KHR_acceleration_structure
+    VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR = 0x00100000,
+  // Provided by VK_KHR_ray_tracing_pipeline
+    VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR = 0x00000400,
 }
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkMappedMemoryRange.html
@@ -962,8 +971,14 @@ pub enum VkDescriptorType {
     VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC = 8,
     VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC = 9,
     VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT = 10,
+  // Provided by VK_EXT_inline_uniform_block
     VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT = 1000138000,
-    VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR = 1000165000,
+  // Provided by VK_KHR_acceleration_structure
+    VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR = 1000150000,
+  // Provided by VK_NV_ray_tracing
+    VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV = 1000165000,
+  // Provided by VK_VALVE_mutable_descriptor_type
+    VK_DESCRIPTOR_TYPE_MUTABLE_VALVE = 1000351000,
 }
 
 // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/VkDescriptorPoolSize.html
@@ -2356,7 +2371,9 @@ pub struct VkMemoryAllocateFlagsInfo {
 #[repr(C)]
 pub enum VkMemoryAllocateFlagBits {
     VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT = 0x00000001,
+    // Provided by VK_VERSION_1_2
     VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT = 0x00000002,
+    // Provided by VK_VERSION_1_2
     VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT = 0x00000004,
 }
 
