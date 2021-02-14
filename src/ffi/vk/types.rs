@@ -57,6 +57,8 @@ pub type VkPipelineDynamicStateCreateFlags = VkFlags;
 pub type VkSemaphoreCreateFlags = VkFlags;
 pub type VkSamplerCreateFlags = VkFlags;
 pub type VkMemoryAllocateFlags = VkFlags;
+pub type VkQueryPoolCreateFlags = VkFlags;
+pub type VkQueryResultFlags = VkFlags;
 
 #[repr(C)]
 pub struct VkInstanceOpaque { _private: [u8; 0] }
@@ -127,6 +129,9 @@ pub type VkShaderModule = *mut VkShaderModuleOpaque;
 #[repr(C)]
 pub struct VkImageOpaque { _private: [u8; 0] }
 pub type VkImage = *mut VkImageOpaque;
+#[repr(C)]
+pub struct VkQueryPoolOpaque { _private: [u8; 0] }
+pub type VkQueryPool = *mut VkQueryPoolOpaque;
 
 pub const VK_MAX_PHYSICAL_DEVICE_NAME_SIZE: size_t = 256;
 pub const VK_UUID_SIZE: size_t = 16;
@@ -2444,6 +2449,46 @@ pub struct VkImageBlit {
     pub dstOffsets: [VkOffset3D; 2],
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkQueryPoolCreateInfo.html
+#[repr(C)]
+pub struct VkQueryPoolCreateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub flags: VkQueryPoolCreateFlags,
+    pub queryType: VkQueryType,
+    pub queryCount: u32,
+    pub pipelineStatistics: VkQueryPipelineStatisticFlags,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkQueryType.html
+#[repr(C)]
+pub enum VkQueryType {
+    VK_QUERY_TYPE_OCCLUSION = 0,
+    VK_QUERY_TYPE_PIPELINE_STATISTICS = 1,
+    VK_QUERY_TYPE_TIMESTAMP = 2,
+  // Provided by VK_EXT_transform_feedback
+    VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT = 1000028004,
+  // Provided by VK_KHR_performance_query
+    VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR = 1000116000,
+  // Provided by VK_KHR_acceleration_structure
+    VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR = 1000150000,
+  // Provided by VK_KHR_acceleration_structure
+    VK_QUERY_TYPE_ACCELERATION_STRUCTURE_SERIALIZATION_SIZE_KHR = 1000150001,
+  // Provided by VK_NV_ray_tracing
+    VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_NV = 1000165000,
+  // Provided by VK_INTEL_performance_query
+    VK_QUERY_TYPE_PERFORMANCE_QUERY_INTEL = 1000210000,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkQueryResultFlagBits.html
+#[repr(C)]
+pub enum VkQueryResultFlagBits {
+    VK_QUERY_RESULT_64_BIT = 0x00000001,
+    VK_QUERY_RESULT_WAIT_BIT = 0x00000002,
+    VK_QUERY_RESULT_WITH_AVAILABILITY_BIT = 0x00000004,
+    VK_QUERY_RESULT_PARTIAL_BIT = 0x00000008,
+}
+
 #[link(name = "vulkan")]
 extern "C" {
     // @see https://www.khronos.org/registry/vulkan/specs/1.1-extensions/man/html/vkCreateInstance.html
@@ -3004,4 +3049,28 @@ extern "C" {
         pRegions: *const VkImageBlit,
         filter: VkFilter,
     );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCreateQueryPool.html
+    pub fn vkCreateQueryPool(
+        device: VkDevice,
+        pCreateInfo: *const VkQueryPoolCreateInfo,
+        pAllocator: *const VkAllocationCallbacks,
+        pQueryPool: *mut VkQueryPool,
+    ) -> VkResult;
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkDestroyQueryPool.html
+    pub fn vkDestroyQueryPool(
+        device: VkDevice,
+        queryPool: VkQueryPool,
+        pAllocator: *const VkAllocationCallbacks,
+    );
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetQueryPoolResults.html
+    pub fn vkGetQueryPoolResults(
+        device: VkDevice,
+        queryPool: VkQueryPool,
+        firstQuery: u32,
+        queryCount: u32,
+        dataSize: size_t,
+        pData: *mut c_void,
+        stride: VkDeviceSize,
+        flags: VkQueryResultFlags,
+    ) -> VkResult;
 }

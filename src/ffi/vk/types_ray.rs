@@ -375,6 +375,25 @@ pub struct VkWriteDescriptorSetAccelerationStructureKHR {
     pub pAccelerationStructures: *const VkAccelerationStructureKHR,
 }
 
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkCopyAccelerationStructureInfoKHR.html
+#[repr(C)]
+pub struct VkCopyAccelerationStructureInfoKHR {
+    pub sType: VkStructureTypeExtRay,
+    pub pNext: *const c_void,
+    pub src: VkAccelerationStructureKHR,
+    pub dst: VkAccelerationStructureKHR,
+    pub mode: VkCopyAccelerationStructureModeKHR,
+}
+
+// @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/VkCopyAccelerationStructureModeKHR.html
+#[repr(C)]
+pub enum VkCopyAccelerationStructureModeKHR {
+    VK_COPY_ACCELERATION_STRUCTURE_MODE_CLONE_KHR = 0,
+    VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR = 1,
+    VK_COPY_ACCELERATION_STRUCTURE_MODE_SERIALIZE_KHR = 2,
+    VK_COPY_ACCELERATION_STRUCTURE_MODE_DESERIALIZE_KHR = 3,
+}
+
 mod dispatch {
     use super::*;
 
@@ -559,6 +578,60 @@ mod dispatch {
                 width,
                 height,
                 depth,
+            )
+        }
+    }
+
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdWriteAccelerationStructuresPropertiesKHR.html
+    pub fn dispatch_vkCmdWriteAccelerationStructuresPropertiesKHR(
+        device: VkDevice,
+        commandBuffer: VkCommandBuffer,
+        accelerationStructureCount: u32,
+        pAccelerationStructures: *const VkAccelerationStructureKHR,
+        queryType: VkQueryType,
+        queryPool: VkQueryPool,
+        firstQuery: u32,
+    ) {
+        const NAME: &str = "vkCmdWriteAccelerationStructuresPropertiesKHR\0";
+        unsafe {
+            let addr = vkGetDeviceProcAddr(device, NAME.as_ptr() as *const c_char);
+            let func: extern fn (
+                VkCommandBuffer,
+                u32,
+                *const VkAccelerationStructureKHR,
+                VkQueryType,
+                VkQueryPool,
+                u32,
+            ) -> ();
+            func = std::mem::transmute(addr);
+            (func)(
+                commandBuffer,
+                accelerationStructureCount,
+                pAccelerationStructures,
+                queryType,
+                queryPool,
+                firstQuery,
+            )
+        }
+    }
+
+    // @see https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkCmdCopyAccelerationStructureKHR.html
+    pub fn dispatch_vkCmdCopyAccelerationStructureKHR(
+        device: VkDevice,
+        commandBuffer: VkCommandBuffer,
+        pInfo: *const VkCopyAccelerationStructureInfoKHR,
+    ) {
+        const NAME: &str = "vkCmdCopyAccelerationStructureKHR\0";
+        unsafe {
+            let addr = vkGetDeviceProcAddr(device, NAME.as_ptr() as *const c_char);
+            let func: extern fn (
+                VkCommandBuffer,
+                *const VkCopyAccelerationStructureInfoKHR,
+            ) -> ();
+            func = std::mem::transmute(addr);
+            (func)(
+                commandBuffer,
+                pInfo,
             )
         }
     }
