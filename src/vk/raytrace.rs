@@ -253,6 +253,7 @@ struct AccelerationStructure {
     handle: VkAccelerationStructureKHR,
     buffer_memory: Arc<AccelerationStructureBufferMemory>,
     device: Arc<Device>,
+    size: VkDeviceSize,
 }
 
 impl AccelerationStructure {
@@ -282,6 +283,7 @@ impl AccelerationStructure {
                 handle,
                 buffer_memory,
                 device: Arc::clone(device),
+                size: structure_size,
             };
             Arc::new(structure)
         }
@@ -293,6 +295,10 @@ impl AccelerationStructure {
 
     fn device(&self) -> &Arc<Device> {
         &self.device
+    }
+
+    fn size(&self) -> VkDeviceSize {
+        self.size
     }
 }
 
@@ -316,14 +322,15 @@ impl BottomLevelAccelerationStructureBuildQuery {
         }
     }
 
-    fn build(self, device: &Arc<Device>) -> BottomLevelAccelerationStructureBuild {
-        BottomLevelAccelerationStructureBuild::new(device, self.geometries)
+    fn build(self, device: &Arc<Device>, index: usize) -> BottomLevelAccelerationStructureBuild {
+        BottomLevelAccelerationStructureBuild::new(device, self.geometries, index)
     }
 }
 
 struct BottomLevelAccelerationStructureBuild {
     device: Arc<Device>,
     geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+    index: usize,
     sizes_info: VkAccelerationStructureBuildSizesInfoKHR,
     geometries_vec: Vec<VkAccelerationStructureGeometryKHR>,
     max_primitive_count_vec: Vec<u32>,
@@ -333,6 +340,8 @@ impl BottomLevelAccelerationStructureBuild {
     fn new(
         device: &Arc<Device>,
         geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+        // store an index to identify the associated query within query pool
+        index: usize,
     ) -> Self {
         unsafe {
             let geometries_vec: Vec<VkAccelerationStructureGeometryKHR> = geometries.iter()
@@ -347,6 +356,7 @@ impl BottomLevelAccelerationStructureBuild {
             Self {
                 device: Arc::clone(device),
                 geometries,
+                index,
                 sizes_info,
                 geometries_vec,
                 max_primitive_count_vec,
@@ -361,10 +371,9 @@ impl BottomLevelAccelerationStructureBuild {
     unsafe fn begin(self,
         recording: &CommandBufferRecording,
         scratch_buffer_memory: &Arc<DedicatedBufferMemory>,
+        query_pool: &Arc<AccelerationStructureCompactionQueryPool>,
     ) -> BottomLevelAccelerationStructureBuildProcess {
         use VkAccelerationStructureTypeKHR::*;
-        use VkBuildAccelerationStructureFlagBitsKHR::*;
-        use VkBuildAccelerationStructureModeKHR::*;
         use VkAccessFlagBits::*;
         use VkPipelineStageFlagBits::*;
         let geometries = self.geometries;
@@ -376,31 +385,20 @@ impl BottomLevelAccelerationStructureBuild {
             sizes_info.accelerationStructureSize, 
             VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
         );
-        let build_info = VkAccelerationStructureBuildGeometryInfoKHR {
-            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-            pNext: ptr::null(),
-            r#type: VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-            flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkBuildAccelerationStructureFlagsKHR,
-            mode: VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
-            srcAccelerationStructure: ptr::null_mut(),
-            dstAccelerationStructure: structure.handle(),
-            geometryCount: geometries_vec.len() as u32,
-            pGeometries: geometries_vec.as_ptr(),
-            ppGeometries: ptr::null(),
-            scratchData: VkDeviceOrHostAddressKHR {
-                deviceAddress: scratch_buffer_memory.buffer_device_address(),
-            },
-        };
+        let build_info = Self::make_build_info(
+            &geometries_vec, 
+            &structure, 
+            scratch_buffer_memory,
+        );
         let range_info_vec: Vec<VkAccelerationStructureBuildRangeInfoKHR> = geometries.iter()
             .map(|v| v.range_info())
             .collect();
-        let range_info_vec_vec: Vec<*const VkAccelerationStructureBuildRangeInfoKHR> = vec![range_info_vec.as_ptr()];
         dispatch_vkCmdBuildAccelerationStructuresKHR(
             device.handle(), 
             recording.command_buffer(),
             1,
             &build_info,
-            range_info_vec_vec.as_ptr(),
+            &range_info_vec.as_ptr(),
         );
         // memory barrier allowing reuse of scratch across builds
         let memory_barrier = VkMemoryBarrier {
@@ -418,27 +416,63 @@ impl BottomLevelAccelerationStructureBuild {
             0, ptr::null(),
             0, ptr::null(),
         );
+        // query compacted size
+        let index = self.index;
+        dispatch_vkCmdWriteAccelerationStructuresPropertiesKHR(
+            device.handle(),
+            recording.command_buffer(),
+            1,
+            &structure.handle(),
+            VkQueryType::VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR,
+            query_pool.handle(),
+            index as u32,
+        );
         BottomLevelAccelerationStructureBuildProcess::new(
             geometries, 
             structure, 
-            scratch_buffer_memory
+            scratch_buffer_memory,
+            index,
         )
     }
 
-    unsafe fn make_sizes_info(
-        device: &Arc<Device>,
-        geometries_vec: &Vec<VkAccelerationStructureGeometryKHR>, 
-        max_primitive_count_vec: &Vec<u32>
-    ) -> VkAccelerationStructureBuildSizesInfoKHR {
+    fn make_build_info(
+        geometries_vec: &Vec<VkAccelerationStructureGeometryKHR>,
+        structure: &Arc<AccelerationStructure>,
+        scratch_buffer_memory: &Arc<DedicatedBufferMemory>,
+    ) -> VkAccelerationStructureBuildGeometryInfoKHR {
         use VkAccelerationStructureTypeKHR::*;
         use VkBuildAccelerationStructureFlagBitsKHR::*;
         use VkBuildAccelerationStructureModeKHR::*;
-        use VkAccelerationStructureBuildTypeKHR::*;
-        let build_info = VkAccelerationStructureBuildGeometryInfoKHR {
+        VkAccelerationStructureBuildGeometryInfoKHR {
             sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
             pNext: ptr::null(),
             r#type: VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-            flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkBuildAccelerationStructureFlagsKHR,
+            flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkBuildAccelerationStructureFlagsKHR
+                | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR as VkBuildAccelerationStructureFlagsKHR,
+            mode: VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
+            srcAccelerationStructure: ptr::null_mut(),
+            dstAccelerationStructure: structure.handle(),
+            geometryCount: geometries_vec.len() as u32,
+            pGeometries: geometries_vec.as_ptr(),
+            ppGeometries: ptr::null(),
+            scratchData: VkDeviceOrHostAddressKHR {
+                deviceAddress: scratch_buffer_memory.buffer_device_address(),
+            },
+        }
+    }
+
+    fn make_scratch_build_info(
+        geometries_vec: &Vec<VkAccelerationStructureGeometryKHR>,
+    ) -> VkAccelerationStructureBuildGeometryInfoKHR {
+        use VkAccelerationStructureTypeKHR::*;
+        use VkBuildAccelerationStructureFlagBitsKHR::*;
+        use VkBuildAccelerationStructureModeKHR::*;
+        VkAccelerationStructureBuildGeometryInfoKHR {
+            sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+            pNext: ptr::null(),
+            r#type: VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+            flags: VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR as VkBuildAccelerationStructureFlagsKHR
+                | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR as VkBuildAccelerationStructureFlagsKHR,
             mode: VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
             srcAccelerationStructure: ptr::null_mut(),
             dstAccelerationStructure: ptr::null_mut(),
@@ -448,7 +482,16 @@ impl BottomLevelAccelerationStructureBuild {
             scratchData: VkDeviceOrHostAddressKHR {
                 deviceAddress: 0,
             },
-        };
+        }
+    }
+
+    unsafe fn make_sizes_info(
+        device: &Arc<Device>,
+        geometries_vec: &Vec<VkAccelerationStructureGeometryKHR>, 
+        max_primitive_count_vec: &Vec<u32>,
+    ) -> VkAccelerationStructureBuildSizesInfoKHR {
+        use VkAccelerationStructureBuildTypeKHR::*;
+        let build_info = Self::make_scratch_build_info(geometries_vec);
         let mut sizes_info = MaybeUninit::<VkAccelerationStructureBuildSizesInfoKHR>::zeroed();
         {
             let sizes_info = &mut *sizes_info.as_mut_ptr();
@@ -466,10 +509,76 @@ impl BottomLevelAccelerationStructureBuild {
     }
 }
 
+struct AccelerationStructureCompactionQueryPool {
+    handle: VkQueryPool,
+    device: Arc<Device>,
+    query_count: usize,
+}
+
+impl AccelerationStructureCompactionQueryPool {
+    fn new(device: &Arc<Device>, query_count: usize) -> Arc<Self> {
+        unsafe {
+            let create_info = VkQueryPoolCreateInfo {
+                sType: VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+                pNext: ptr::null(),
+                flags: 0,
+                queryType: VkQueryType::VK_QUERY_TYPE_ACCELERATION_STRUCTURE_COMPACTED_SIZE_KHR,
+                queryCount: query_count as u32,
+                pipelineStatistics: 0,
+            };
+            let mut handle = MaybeUninit::<VkQueryPool>::zeroed();
+            vkCreateQueryPool(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
+                .into_result()
+                .unwrap();
+            let handle = handle.assume_init();
+            let query_pool = Self {
+                handle,
+                device: Arc::clone(device),
+                query_count,
+            };
+            Arc::new(query_pool)
+        }
+    }
+
+    fn compact_sizes(&self) -> Result<Vec<VkDeviceSize>> {
+        unsafe {
+            use VkQueryResultFlagBits::*; 
+            let mut vec: Vec<VkDeviceSize> = Vec::with_capacity(self.query_count);
+            vec.resize(self.query_count, Default::default());
+            let stride = std::mem::size_of::<VkDeviceSize>();
+            vkGetQueryPoolResults(
+                self.device.handle(), 
+                self.handle, 
+                0, 
+                self.query_count as u32, 
+                self.query_count * stride,
+                vec.as_mut_ptr() as *mut c_void,
+                stride as VkDeviceSize,
+                VK_QUERY_RESULT_WAIT_BIT as VkQueryResultFlags,
+            )
+                .into_result()?;
+            Ok(vec)
+        }
+    }
+
+    fn handle(&self) -> VkQueryPool {
+        self.handle
+    }
+}
+
+impl Drop for AccelerationStructureCompactionQueryPool {
+    fn drop(&mut self) {
+        unsafe {
+            vkDestroyQueryPool(self.device.handle(), self.handle, ptr::null());
+        }
+    }
+}
+
 struct BottomLevelAccelerationStructureBuildProcess {
     geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
     structure: Arc<AccelerationStructure>,
     scratch: Arc<DedicatedBufferMemory>,
+    index: usize,
 }
 
 impl BottomLevelAccelerationStructureBuildProcess {
@@ -477,17 +586,80 @@ impl BottomLevelAccelerationStructureBuildProcess {
         geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
         structure: Arc<AccelerationStructure>,
         scratch: &Arc<DedicatedBufferMemory>,
+        index: usize,
     ) -> Self {
         let building = Self {
             geometries,
             structure,
             scratch: Arc::clone(scratch),
+            index,
         };
         building
     }
 
-    fn complete(self) -> Arc<BottomLevelAccelerationStructure> {
-        BottomLevelAccelerationStructure::new(self.geometries, self.structure)
+    fn compact(self, 
+        recording: &CommandBufferRecording,
+        compact_sizes: &Vec<VkDeviceSize>) -> BottomLevelAccelerationStructureCompactionProcess {
+        use VkAccelerationStructureTypeKHR::*;
+        use VkCopyAccelerationStructureModeKHR::*;
+        let compact_size = compact_sizes.get(self.index)
+            .unwrap()
+            .clone();
+        let device = recording.command_pool().queue().device();
+        let original_structure = self.structure;
+        let compacted_structure = AccelerationStructure::new(
+            device,
+            compact_size,
+            VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+        );
+        let copy_info = VkCopyAccelerationStructureInfoKHR {
+            sType: VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR,
+            pNext: ptr::null(),
+            src: original_structure.handle(),
+            dst: compacted_structure.handle(),
+            mode: VK_COPY_ACCELERATION_STRUCTURE_MODE_COMPACT_KHR,
+        };
+        dispatch_vkCmdCopyAccelerationStructureKHR(
+            device.handle(),
+            recording.command_buffer(),
+            &copy_info,
+        );
+        BottomLevelAccelerationStructureCompactionProcess::new(
+            self.geometries, 
+            original_structure, 
+            compacted_structure, 
+            self.index,
+        )
+    }
+}
+
+struct BottomLevelAccelerationStructureCompactionProcess {
+    geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+    original_structure: Arc<AccelerationStructure>,
+    compacted_structure: Arc<AccelerationStructure>,
+    index: usize,
+}
+
+impl BottomLevelAccelerationStructureCompactionProcess {
+    fn new(
+        geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+        original_structure: Arc<AccelerationStructure>,
+        compacted_structure: Arc<AccelerationStructure>,
+        index: usize,
+    ) -> Self {
+        let compaction = Self {
+            geometries,
+            original_structure,
+            compacted_structure,
+            index,
+        };
+        compaction
+    }
+
+    fn finalize(self) -> Arc<BottomLevelAccelerationStructure> {
+        // log_debug!("BLAS Compaction #{}: {} -> {}", self.index, self.original_structure.size(), self.compacted_structure.size());
+        // discards original structure
+        BottomLevelAccelerationStructure::new(self.geometries, self.compacted_structure)
     }
 }
 
@@ -526,7 +698,7 @@ impl BottomLevelAccelerationStructure {
         self.structure.handle()
     }
 
-    pub fn device_address(&self) -> VkDeviceAddress {
+    fn device_address(&self) -> VkDeviceAddress {
         self.device_address
     }
 }
@@ -556,36 +728,57 @@ impl<'a> BottomLevelAccelerationStructuresBuilder<'a> {
         let device = command_pool.queue().device();
         unsafe {
             let builds: Vec<_> = queries.into_iter()
-                .map(|v| v.build(device))
+                .enumerate()
+                .map(|(i, v)| v.build(device, i))
                 .collect();
-            // estimate required scratch size
-            let build_scratch_size = builds.iter()
-                .map(|v| v.scratch_size())
-                .max()
-                .unwrap();
-            // creates shared scratch memory
-            let scratch_buffer_memory = DedicatedBufferMemory::new(
-                device, 
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as VkBufferUsageFlags
-                    | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags, 
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-                build_scratch_size,
-            )
-                .unwrap();
-            // begin builds
-            let recording = CommandBufferRecording::new_onetime_submit(command_pool)
-                .unwrap();
-            let processes: Vec<_> = builds.into_iter()
-                .map(|v| v.begin(&recording, &scratch_buffer_memory))
-                .collect();
-            let command_buffer = recording.complete();
-            // wait until all commands complete
-            command_pool.queue()
-                .submit_then_wait(&[command_buffer.handle()])
-                .unwrap();
-            // discards scratch buffers once it completes
-            let blas_vec: Vec<_> = processes.into_iter()
-                .map(|v| v.complete())
+            // creates query pool for compaction
+            let query_pool = AccelerationStructureCompactionQueryPool::new(device, builds.len());
+            let build_processes: Vec<_> = {
+                // estimate required scratch size
+                let build_scratch_size = builds.iter()
+                    .map(|v| v.scratch_size())
+                    .max()
+                    .unwrap();
+                // creates shared scratch memory
+                let scratch_buffer_memory = DedicatedBufferMemory::new(
+                    device, 
+                    VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as VkBufferUsageFlags
+                        | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags, 
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+                    build_scratch_size,
+                )
+                    .unwrap();
+                let recording = CommandBufferRecording::new_onetime_submit(command_pool)
+                    .unwrap();
+                let build_processes: Vec<_> = builds.into_iter()
+                    .map(|v| v.begin(&recording, &scratch_buffer_memory, &query_pool))
+                    .collect();
+                let command_buffer = recording.complete();
+                // wait until all commands complete
+                command_pool.queue()
+                    .submit_then_wait(&[command_buffer.handle()])
+                    .unwrap();
+                // discards scratch buffers once it completes
+                build_processes
+            };
+            let compaction_processes: Vec<_> = {
+                let recording = CommandBufferRecording::new_onetime_submit(command_pool)
+                    .unwrap();
+                let compact_sizes = query_pool.compact_sizes()
+                    .unwrap();
+                // compaction
+                let compaction_processes: Vec<_> = build_processes.into_iter()
+                    .map(|v| v.compact(&recording, &compact_sizes))
+                    .collect();
+                let command_buffer = recording.complete();
+                // wait until all commands complete
+                command_pool.queue()
+                    .submit_then_wait(&[command_buffer.handle()])
+                    .unwrap();
+                compaction_processes
+            };
+            let blas_vec: Vec<_> = compaction_processes.into_iter()
+                .map(|v| v.finalize())
                 .collect();
             blas_vec
         }
