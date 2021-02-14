@@ -298,18 +298,16 @@ impl AccelerationStructure {
 
 impl Drop for AccelerationStructure {
     fn drop(&mut self) {
-        unsafe {
-            vkDestroyAccelerationStructureKHR(self.device.handle(), self.handle, ptr::null());
-        }
+        vkDestroyAccelerationStructureKHR(self.device.handle(), self.handle, ptr::null());
     }
 }
 
 // represents the method to build a structure
-pub struct BottomLevelAccelerationStructureBuild {
+pub struct BottomLevelAccelerationStructureBuildQuery {
     geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
 }
 
-impl BottomLevelAccelerationStructureBuild {
+impl BottomLevelAccelerationStructureBuildQuery {
     pub fn new(
         geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
     ) -> Self {
@@ -318,46 +316,66 @@ impl BottomLevelAccelerationStructureBuild {
         }
     }
 
-    fn geometries(&self) -> &Vec<Arc<BottomLevelAccelerationStructureGeometry>> {
-        &self.geometries
+    fn build(self, device: &Arc<Device>) -> BottomLevelAccelerationStructureBuild {
+        BottomLevelAccelerationStructureBuild::new(device, self.geometries)
+    }
+}
+
+struct BottomLevelAccelerationStructureBuild {
+    device: Arc<Device>,
+    geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+    sizes_info: VkAccelerationStructureBuildSizesInfoKHR,
+    geometries_vec: Vec<VkAccelerationStructureGeometryKHR>,
+    max_primitive_count_vec: Vec<u32>,
+}
+
+impl BottomLevelAccelerationStructureBuild {
+    fn new(
+        device: &Arc<Device>,
+        geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
+    ) -> Self {
+        unsafe {
+            let geometries_vec: Vec<VkAccelerationStructureGeometryKHR> = geometries.iter()
+                .map(|v| v.geometry())
+                .collect();
+            // pMaxPrimitiveCounts is a pointer to an array of pBuildInfo->geometryCount uint32_t values 
+            // defining the number of primitives built into each geometry.
+            let max_primitive_count_vec: Vec<u32> = geometries.iter()
+                .map(|v| v.max_primitive_count())
+                .collect();
+            let sizes_info = Self::make_sizes_info(device, &geometries_vec, &max_primitive_count_vec);
+            Self {
+                device: Arc::clone(device),
+                geometries,
+                sizes_info,
+                geometries_vec,
+                max_primitive_count_vec,
+            }
+        }
     }
 
-    unsafe fn build(&self,
+    fn scratch_size(&self) -> VkDeviceSize {
+        self.sizes_info.buildScratchSize
+    }
+
+    unsafe fn begin(self,
         recording: &CommandBufferRecording,
+        scratch_buffer_memory: &Arc<DedicatedBufferMemory>,
     ) -> BottomLevelAccelerationStructureBuildProcess {
         use VkAccelerationStructureTypeKHR::*;
-        use VkBufferUsageFlagBits::*;
-        use VkMemoryPropertyFlagBits::*;
         use VkBuildAccelerationStructureFlagBitsKHR::*;
         use VkBuildAccelerationStructureModeKHR::*;
-        let geometries = self.geometries();
-        let geometries_vec: Vec<VkAccelerationStructureGeometryKHR> = geometries.iter()
-            .map(|v| v.geometry())
-            .collect();
-        // pMaxPrimitiveCounts is a pointer to an array of pBuildInfo->geometryCount uint32_t values 
-        // defining the number of primitives built into each geometry.
-        let max_primitive_count_vec: Vec<u32> = geometries.iter()
-            .map(|v| v.max_primitive_count())
-            .collect();
+        use VkAccessFlagBits::*;
+        use VkPipelineStageFlagBits::*;
+        let geometries = self.geometries;
+        let geometries_vec = self.geometries_vec;
+        let sizes_info = self.sizes_info;
         let device = recording.command_pool().queue().device();
-        let sizes_info = Self::make_sizes_info(
-            device, 
-            &geometries_vec, 
-            &max_primitive_count_vec,
-        );
         let structure = AccelerationStructure::new(
             device, 
             sizes_info.accelerationStructureSize, 
             VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
         );
-        let scratch_buffer_memory = DedicatedBufferMemory::new(
-            device, 
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as VkBufferUsageFlags
-                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags, 
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
-            sizes_info.buildScratchSize,
-        )
-            .unwrap();
         let build_info = VkAccelerationStructureBuildGeometryInfoKHR {
             sType: VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
             pNext: ptr::null(),
@@ -384,7 +402,27 @@ impl BottomLevelAccelerationStructureBuild {
             &build_info,
             range_info_vec_vec.as_ptr(),
         );
-        BottomLevelAccelerationStructureBuildProcess::new(self.geometries.clone(), structure, scratch_buffer_memory)
+        // memory barrier allowing reuse of scratch across builds
+        let memory_barrier = VkMemoryBarrier {
+            sType: VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+            pNext: ptr::null(),
+            srcAccessMask: VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR as VkAccessFlags,
+            dstAccessMask: VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR as VkAccessFlags,
+        };
+        vkCmdPipelineBarrier(
+            recording.command_buffer(), 
+            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR as VkPipelineStageFlags,
+            VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR as VkPipelineStageFlags, 
+            0, 
+            1, &memory_barrier,
+            0, ptr::null(),
+            0, ptr::null(),
+        );
+        BottomLevelAccelerationStructureBuildProcess::new(
+            geometries, 
+            structure, 
+            scratch_buffer_memory
+        )
     }
 
     unsafe fn make_sizes_info(
@@ -438,12 +476,12 @@ impl BottomLevelAccelerationStructureBuildProcess {
     fn new(
         geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
         structure: Arc<AccelerationStructure>,
-        scratch: Arc<DedicatedBufferMemory>,
+        scratch: &Arc<DedicatedBufferMemory>,
     ) -> Self {
         let building = Self {
             geometries,
             structure,
-            scratch,
+            scratch: Arc::clone(scratch),
         };
         building
     }
@@ -495,35 +533,55 @@ impl BottomLevelAccelerationStructure {
 
 pub struct BottomLevelAccelerationStructuresBuilder<'a> {
     command_pool: &'a Arc<CommandPool>, 
-    builds: &'a Vec<BottomLevelAccelerationStructureBuild>,
+    queries: Vec<BottomLevelAccelerationStructureBuildQuery>,
 }
 
 impl<'a> BottomLevelAccelerationStructuresBuilder<'a> {
     // creates bulk of structures
     pub fn new(
         command_pool: &'a Arc<CommandPool>, 
-        builds: &'a Vec<BottomLevelAccelerationStructureBuild>,
+        queries: Vec<BottomLevelAccelerationStructureBuildQuery>,
     ) -> Self {
         Self {
             command_pool,
-            builds,
+            queries,
         }
     }
 
     pub fn build(self) -> Vec<Arc<BottomLevelAccelerationStructure>> {
+        use VkBufferUsageFlagBits::*;
+        use VkMemoryPropertyFlagBits::*;
         let command_pool = self.command_pool;
-        let builds = self.builds;
+        let queries = self.queries;
+        let device = command_pool.queue().device();
         unsafe {
-            // TODO: optimize across multiple builds
+            let builds: Vec<_> = queries.into_iter()
+                .map(|v| v.build(device))
+                .collect();
+            // estimate required scratch size
+            let build_scratch_size = builds.iter()
+                .map(|v| v.scratch_size())
+                .max()
+                .unwrap();
+            // creates shared scratch memory
+            let scratch_buffer_memory = DedicatedBufferMemory::new(
+                device, 
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as VkBufferUsageFlags
+                    | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags, 
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+                build_scratch_size,
+            )
+                .unwrap();
+            // begin builds
             let recording = CommandBufferRecording::new_onetime_submit(command_pool)
                 .unwrap();
             let processes: Vec<_> = builds.into_iter()
-                .map(|v| v.build(&recording))
+                .map(|v| v.begin(&recording, &scratch_buffer_memory))
                 .collect();
             let command_buffer = recording.complete();
-            let command_buffer_vec = vec![command_buffer.handle()];
+            // wait until all commands complete
             command_pool.queue()
-                .submit_then_wait(&command_buffer_vec)
+                .submit_then_wait(&[command_buffer.handle()])
                 .unwrap();
             // discards scratch buffers once it completes
             let blas_vec: Vec<_> = processes.into_iter()

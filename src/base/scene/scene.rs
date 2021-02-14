@@ -78,10 +78,10 @@ impl Scene {
             .map(|v| v.structure_geometry())
             .map(Arc::clone)
             .collect();
-        let builds = geometries.into_iter()
-            .map(|v| BottomLevelAccelerationStructureBuild::new(vec![v]))
+        let queries: Vec<_> = geometries.into_iter()
+            .map(|v| BottomLevelAccelerationStructureBuildQuery::new(vec![v]))
             .collect();
-        let builder = BottomLevelAccelerationStructuresBuilder::new(command_pool, &builds);
+        let builder = BottomLevelAccelerationStructuresBuilder::new(command_pool, queries);
         let structures = builder.build();
         let scene_mesh_primitives: Vec<_> = structures.into_iter()
             .zip(scene_mesh_primitive_geometries.into_iter())
