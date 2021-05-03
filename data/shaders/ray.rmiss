@@ -15,4 +15,6 @@ void main() {
   const vec3 bottomColor = vec3(1.0);
   const vec3 diffuseColor = mix(bottomColor, skyColor, t);
   payload.hitValue = diffuseColor;
+  payload.hits = false;
+  payload.hitT = 0.0;
 }

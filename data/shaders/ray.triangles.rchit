@@ -128,7 +128,7 @@ void main() {
     worldNormal *= -1.0;
   }
   // Diffuse
-  const vec3 lightPosition = vec3(9.0, 20.0, 8.0);
+  const vec3 lightPosition = G_LIGHT_POS;
   const vec3 L = normalize(lightPosition - worldPosition);
   const vec3 light = vec3(lightDiffuse(lightPosition, worldPosition, worldNormal));
   // Shadow
@@ -144,4 +144,6 @@ void main() {
   const float attenuation = (isShadowed) ? 0.3 : 1.0;
   const vec3 finalColor = textureDiffuse * light * attenuation;
   payload.hitValue = finalColor;
+  payload.hits = true;
+  payload.hitT = gl_HitTEXT;
 }
