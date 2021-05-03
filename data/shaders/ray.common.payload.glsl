@@ -4,4 +4,6 @@ struct RayPayload {
   Random random;
   Ray scatter;
   bool continues;
+  bool hits;
+  float hitT;
 };

@@ -9,6 +9,7 @@
 // @see https://nvpro-samples.github.io/vk_raytracing_tutorial_KHR/
 
 layout(location = 0) rayPayloadEXT RayPayload payload;
+layout(location = 1) rayPayloadEXT bool isShadowed;
 
 layout(binding = 0) uniform accelerationStructureEXT topLevelAS;
 layout(binding = 1, rgba8) uniform image2D image;
@@ -17,6 +18,54 @@ layout(binding = 2) uniform Camera {
   mat4 projInverse;
 } camera;
 
+// Shadow sampling
+float sampleShadow(vec3 origin, vec3 direction, float tMax) {
+  isShadowed = true;
+  const float tMin = 0.001;
+  uint flags = gl_RayFlagsTerminateOnFirstHitEXT | gl_RayFlagsSkipClosestHitShaderEXT;
+  traceRayEXT(topLevelAS, flags, 0xff, 0, 0, 1, origin, tMin, direction, tMax, 1);
+  return (isShadowed) ? 1.0 : 0.0;
+}
+
+// Mie scattering phase functions
+float henyeyGreenstein(vec3 inDir, vec3 outDir, float anisotropy) {
+  float theta = dot(inDir, outDir) / (length(inDir) * length(outDir));
+  float g = anisotropy * anisotropy;
+  return (1.0 - g) / (4.0 * M_PI * pow(1.0 + g - 2.0 * anisotropy * theta, 3.0 / 2.0));
+}
+
+// Volumetric scattering
+vec3 absorptionTransmittance(float dist) {
+  float absorptionTau = 0.003;
+  float scatteringTau = 0.07;
+  vec3 absorptionColor = vec3(0.5, 0.5, 0.5);
+  float tau = absorptionTau + scatteringTau;
+  return absorptionColor * exp(-dist * tau);
+}
+
+vec3 volumetricScattering(inout Random rng, vec3 origin, vec3 direction, float t, vec3 lightPosition, int numSamples) {
+  const float lightIntensity = 160000.0;
+  const float scatteringTau = 0.07;
+  const float anisotropy = 0.8;
+  const vec3 scatteringColor = vec3(1.0, 1.0, 1.0);
+  const vec3 deltaStep = (direction * t) / float(numSamples + 1);
+  vec3 x = origin + (deltaStep * randomNext(rng));
+  vec3 result = vec3(0.0, 0.0, 0.0);
+  for (int i = 0; i < numSamples; i++) {
+    vec3 lightToX = x - lightPosition;
+    float lightDist = length(lightToX);
+    lightToX = normalize(lightToX);
+    float visibility = 1.0 - sampleShadow(x, -lightToX, lightDist);
+    float omega = 4.0 * M_PI * lightDist * lightDist;
+    vec3 Lin = absorptionTransmittance(lightDist) * visibility * lightIntensity / omega;
+    vec3 Li = Lin * scatteringTau * scatteringColor * henyeyGreenstein(lightToX, -direction, anisotropy);
+    result += Li * absorptionTransmittance(distance(x, origin)) * length(deltaStep);
+    x += deltaStep;
+  }
+  return result;
+}
+
+// Diffuse sampling
 vec2 samplePixelCenter(inout Random rng, bool isJitter) {
   float r0 = randomNext(rng);
   float r1 = randomNext(rng);
@@ -32,7 +81,14 @@ vec3 diffuse(vec3 origin, vec3 direction) {
   for (uint i = 0; i < 12; i++) {
     payload.continues = false;
     traceRayEXT(topLevelAS, gl_RayFlagsNoneEXT, 0xff, 0, 0, 0, origin, tMin, direction, tMax, 0);
-    color *= payload.hitValue;
+    vec3 diffuse = payload.hitValue;
+    // applies volumetric scattering
+    if (payload.hits) {
+      diffuse += volumetricScattering(payload.random, origin, direction, payload.hitT, G_LIGHT_POS, 4);
+    } else {
+      diffuse += volumetricScattering(payload.random, origin, direction, tMax, G_LIGHT_POS, 1);
+    }
+    color *= diffuse;
     if (payload.continues) {
       origin = payload.scatter.origin;
       direction = payload.scatter.direction;
