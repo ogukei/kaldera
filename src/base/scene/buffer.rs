@@ -30,6 +30,7 @@ pub struct SceneStagingBuffers {
     texcoord_buffer: Arc<DedicatedStagingBuffer>,
     material_description_buffer: Arc<DedicatedStagingBuffer>,
     tangent_buffer: Arc<DedicatedStagingBuffer>,
+    color_buffer: Arc<DedicatedStagingBuffer>,
 }
 
 impl SceneStagingBuffers {
@@ -70,7 +71,10 @@ impl SceneStagingBuffers {
             normals_buffer_size as VkDeviceSize,
         ).unwrap();
         let descriptions: Vec<SceneMeshPrimitiveDescription> = primitives.iter()
-            .map(|v| SceneMeshPrimitiveDescription::new(v.offset().clone(), v.material_index() as u32))
+            .map(|v| SceneMeshPrimitiveDescription::new(
+                v.offset().clone(),
+                v.material_index() as u32,
+                v.use_color_multipliers()))
             .collect();
         let description_buffer_size = std::mem::size_of::<SceneMeshPrimitiveDescription>() * descriptions.len();
         let description_buffer = DedicatedStagingBuffer::new(
@@ -103,6 +107,17 @@ impl SceneStagingBuffers {
                 | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
             tangent_buffer_size as VkDeviceSize,
+        ).unwrap();
+        let has_colors = primitives.iter().any(|v| v.use_color_multipliers());
+        let dummy_buffer_size = 256usize;
+        assert!(dummy_buffer_size % std::mem::size_of::<f32>() == 0);
+        let color_buffer_size = if has_colors { std::mem::size_of::<[f32; 4]>() * num_vertices } else { dummy_buffer_size };
+        let color_buffer = DedicatedStagingBuffer::new(
+            command_pool,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
+                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            color_buffer_size as VkDeviceSize,
         ).unwrap();
         // TODO(ogukei): concurrent uploads
         unsafe {
@@ -170,6 +185,26 @@ impl SceneStagingBuffers {
                     }
                 }
             });
+            if has_colors {
+                color_buffer.update(color_buffer_size as VkDeviceSize, |data| {
+                    let data = data as *mut u8;
+                    for primitive in primitives.iter() {
+                        if let Some(colors) = primitive.primitive().colors() {
+                            let byte_size = colors.count() * std::mem::size_of::<[f32; 4]>();
+                            let byte_offset = primitive.offset().vertex_offset * std::mem::size_of::<[f32; 4]>();
+                            let dst = data.offset(byte_offset as isize);
+                            let src = colors.data();
+                            std::ptr::copy_nonoverlapping(src, dst, byte_size);
+                        } else {
+                            // we don't care the default values since the shader does not access the buffer.
+                            // the mesh description flags indicate that no color multipliers are needed in the mesh.
+                        }
+                    }
+                });
+            } else {
+                // ignores vertex color multipliers.
+                // assumes the shader does not access the buffer.
+            }
         }
         let buffer = Self {
             vertex_buffer,
@@ -179,6 +214,7 @@ impl SceneStagingBuffers {
             texcoord_buffer,
             material_description_buffer,
             tangent_buffer,
+            color_buffer,
         };
         Arc::new(buffer)
     }
@@ -216,5 +252,10 @@ impl SceneStagingBuffers {
     #[inline]
     pub fn tangent_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
         &self.tangent_buffer
+    }
+
+    #[inline]
+    pub fn color_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.color_buffer
     }
 }

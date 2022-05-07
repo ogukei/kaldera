@@ -16,8 +16,12 @@ struct MeshPrimitiveDescription {
   uint vertexOffset;
   uint indexOffset;
   uint materialIndex;
-  uint reserved;
+  uint flags;
 };
+
+bool useColorMultipliers(uint flags) {
+  return ((flags & 1) != 0);
+}
 
 struct MaterialDescription {
   int colorTextureIndex;
@@ -36,6 +40,7 @@ layout(binding = 7) readonly buffer Texcoords { float texcoords[]; };
 layout(binding = 8) uniform sampler2D textures[];
 layout(binding = 11) readonly buffer Materials { MaterialDescription materials[]; };
 layout(binding = 12) readonly buffer Tangents { float tangents[]; };
+layout(binding = 13) readonly buffer Colors { float colors[]; };
 
 hitAttributeEXT vec3 attribs;
 
@@ -69,6 +74,13 @@ vec4 tangentAt(uint index) {
               tangents[nonuniformEXT(4 * index + 1)],
               tangents[nonuniformEXT(4 * index + 2)],
               tangents[nonuniformEXT(4 * index + 3)]);
+}
+
+vec4 colorAt(uint index) {
+  return vec4(colors[nonuniformEXT(4 * index + 0)],
+              colors[nonuniformEXT(4 * index + 1)],
+              colors[nonuniformEXT(4 * index + 2)],
+              colors[nonuniformEXT(4 * index + 3)]);
 }
 
 void main() {
@@ -127,6 +139,15 @@ void main() {
   if (dot(worldNormal, worldGeometricNormal) <= 0.0) {
     worldNormal *= -1.0;
   }
+  // Colors
+  vec3 colorMultiplier = vec3(1.0);
+  if (useColorMultipliers(desc.flags)) {
+    const vec4 c0 = colorAt(triangleIndex.x);
+    const vec4 c1 = colorAt(triangleIndex.y);
+    const vec4 c2 = colorAt(triangleIndex.z);
+    const vec4 c = c0 * barycentrics.x + c1 * barycentrics.y + c2 * barycentrics.z;
+    colorMultiplier = c.rgb;
+  }
   // Diffuse
   const vec3 lightPosition = vec3(9.0, 20.0, 8.0);
   const vec3 L = normalize(lightPosition - worldPosition);
@@ -142,6 +163,6 @@ void main() {
     traceRayEXT(topLevelAS, flags, 0xff, 0, 0, 1, origin, tMin, direction, tMax, 1);
   }
   const float attenuation = (isShadowed) ? 0.3 : 1.0;
-  const vec3 finalColor = textureDiffuse * light * attenuation;
+  const vec3 finalColor = textureDiffuse * colorMultiplier * light * attenuation;
   payload.hitValue = finalColor;
 }

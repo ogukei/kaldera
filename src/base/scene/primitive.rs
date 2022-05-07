@@ -24,6 +24,7 @@ pub struct Primitive<'a> {
     normals: Normals<'a>,
     texcoords: Texcoords<'a>,
     tangents: Option<Tangents<'a>>,
+    colors: Option<Colors<'a>>,
     material_index: Option<usize>,
     is_opaque: bool,
 }
@@ -39,6 +40,7 @@ impl<'a> Primitive<'a> {
             // TODO(ogukei): support default TEXCOORD_0
             texcoords: Texcoords::new(&primitive, buffers).unwrap(),
             tangents: Tangents::new(&primitive, buffers),
+            colors: Colors::new(&primitive, buffers),
             material_index,
             is_opaque,
         }
@@ -77,6 +79,11 @@ impl<'a> Primitive<'a> {
     #[inline]
     pub fn tangents(&self) -> Option<&Tangents<'a>> {
         self.tangents.as_ref()
+    }
+
+    #[inline]
+    pub fn colors(&self) -> Option<&Colors> {
+        self.colors.as_ref()
     }
 }
 
@@ -386,6 +393,69 @@ impl<'a> AccessorTangents<'a> {
         Self {
             slice,
             count: tangents.count(),
+        }
+    }
+}
+
+pub enum Colors<'a> {
+    Accessor(AccessorColors<'a>),
+    Vector(Vec<[f32; 4]>)
+}
+
+impl<'a> Colors<'a> {
+    fn new(primitive: &gltf::Primitive<'a>, buffers: &'a Vec<gltf::buffer::Data>) -> Option<Self> {
+        let colors= primitive.attributes()
+            .find_map(|(semantic, accessor)| 
+                match semantic { 
+                    Semantic::Colors(set) => if set == 0 { Some(accessor) } else { None },
+                    _ => None,
+                }
+            )?;
+        let view = colors.view().unwrap();
+        let use_reference = view.stride() == None
+            && colors.data_type() == DataType::F32
+            && colors.dimensions() == Dimensions::Vec4;
+        let colors = if use_reference {
+            Self::Accessor(AccessorColors::new(&colors, buffers))
+        } else {
+            let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+            let colors = reader.read_colors(0).unwrap();
+            Self::Vector(colors.into_rgba_f32().collect())
+        };
+        Some(colors)
+    }
+
+    #[inline]
+    pub fn count(&self) -> usize {
+        match &self {
+            &Self::Accessor(colors) => colors.count,
+            &Self::Vector(v) => v.len(),
+        }
+    }
+
+    #[inline]
+    pub fn data(&self) -> *const u8 {
+        match &self {
+            &Self::Accessor(colors) => colors.slice.as_ptr(),
+            &Self::Vector(v) => v.as_ptr() as *const _ as *const u8,
+        }
+    }
+}
+
+pub struct AccessorColors<'a> {
+    slice: &'a [u8],
+    count: usize,
+}
+
+impl<'a> AccessorColors<'a> {
+    fn new(colors: &gltf::Accessor<'a>, buffers: &'a Vec<gltf::buffer::Data>) -> Self {
+        let view = colors.view().unwrap();
+        let buffer = buffers.get(view.buffer().index()).unwrap();
+        let offset = view.offset() + colors.offset();
+        let slice = &buffer[offset..offset + view.length()];
+        Self {
+            slice,
+            count: colors.count(),
         }
     }
 }

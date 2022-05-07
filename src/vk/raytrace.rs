@@ -1118,6 +1118,12 @@ impl RayTracingGraphicsPipeline {
                         | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
                     12,
                 ),
+                VkDescriptorSetLayoutBinding::new(
+                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                    13,
+                ),
             ];
             let create_info = VkDescriptorSetLayoutCreateInfo::new(bindings.len() as u32, bindings.as_ptr());
             vkCreateDescriptorSetLayout(device.handle(), &create_info, ptr::null(), descriptor_set_layout.as_mut_ptr())
@@ -1353,6 +1359,7 @@ pub struct RayTracingDescriptorSets {
     material_storage_buffer: Arc<DedicatedStagingBuffer>,
     material_description_storage_buffer: Arc<DedicatedStagingBuffer>,
     tangent_storage_buffer: Arc<DedicatedStagingBuffer>,
+    color_storage_buffer: Arc<DedicatedStagingBuffer>,
     descriptor_pool: VkDescriptorPool,
     descriptor_set: VkDescriptorSet,
 }
@@ -1373,6 +1380,7 @@ impl RayTracingDescriptorSets {
         material_storage_buffer: &Arc<DedicatedStagingBuffer>,
         material_description_storage_buffer: &Arc<DedicatedStagingBuffer>,
         tangent_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        color_storage_buffer: &Arc<DedicatedStagingBuffer>,
     ) -> Result<Arc<Self>> {
         unsafe {
             Self::init(pipeline, 
@@ -1389,6 +1397,7 @@ impl RayTracingDescriptorSets {
                 material_storage_buffer,
                 material_description_storage_buffer,
                 tangent_storage_buffer,
+                color_storage_buffer,
             )
         }
     }
@@ -1408,6 +1417,7 @@ impl RayTracingDescriptorSets {
         material_storage_buffer: &Arc<DedicatedStagingBuffer>,
         material_description_storage_buffer: &Arc<DedicatedStagingBuffer>,
         tangent_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        color_storage_buffer: &Arc<DedicatedStagingBuffer>,
     ) -> Result<Arc<Self>> {
         let device = pipeline.device();
         // Descriptor Pool
@@ -1423,6 +1433,7 @@ impl RayTracingDescriptorSets {
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, textures.len() as u32),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
@@ -1571,6 +1582,15 @@ impl RayTracingDescriptorSets {
             VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             12,
             &write_tangent_buffer_info);
+        let write_color_buffer_info = VkDescriptorBufferInfo {
+            buffer: color_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: color_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_color_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            13,
+            &write_color_buffer_info);
         let write_descriptor_sets = vec![
             write_acceleration_structure,
             write_image,
@@ -1585,6 +1605,7 @@ impl RayTracingDescriptorSets {
             write_material_buffer,
             write_material_description_buffer,
             write_tangent_buffer,
+            write_color_buffer,
         ];
         vkUpdateDescriptorSets(device.handle(), 
             write_descriptor_sets.len() as u32, 
@@ -1607,6 +1628,7 @@ impl RayTracingDescriptorSets {
             material_storage_buffer: Arc::clone(material_storage_buffer),
             material_description_storage_buffer: Arc::clone(material_description_storage_buffer),
             tangent_storage_buffer: Arc::clone(tangent_storage_buffer),
+            color_storage_buffer: Arc::clone(color_storage_buffer),
             descriptor_pool,
             descriptor_set,
         };

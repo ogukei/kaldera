@@ -22,64 +22,86 @@ use super::mesh::*;
 
 pub struct Material<'a> {
     material: gltf::material::Material<'a>,
-    color_image_pixels: Option<(&'a gltf::image::Data, MaterialImagePixels<'a>)>,
-    normal_image_pixels: Option<(&'a gltf::image::Data, MaterialImagePixels<'a>)>,
+    color_image: Option<MaterialImage<'a>>,
+    normal_image: Option<MaterialImage<'a>>,
 }
 
 impl<'a> Material<'a> {
     pub fn new(material: gltf::material::Material<'a>, images: &'a Vec<gltf::image::Data>) -> Self {
-        let color_image_pixels = Self::color_info(&material, images);
-        let normal_image_pixels = Self::normal_info(&material, images);
+        let color_image = Self::color_info(&material, images);
+        let normal_image = Self::normal_info(&material, images);
         Self {
             material,
-            color_image_pixels,
-            normal_image_pixels,
+            color_image,
+            normal_image,
         }
     }
 
     fn color_info(
         material: &gltf::material::Material<'a>, 
         images: &'a Vec<gltf::image::Data>
-    ) -> Option<(&'a gltf::image::Data, MaterialImagePixels<'a>)> 
+    ) -> Option<MaterialImage<'a>> 
     {
         let model = material.pbr_metallic_roughness();
         let color = model.base_color_texture()?;
         let image_index = color.texture().source().index();
         let image = images.get(image_index)?;
         let pixels = MaterialImagePixels::new(image)?;
-        Some((image, pixels))
+        let image = MaterialImage::new(pixels, image.width, image.height);
+        Some(image)
     }
 
     fn normal_info(
         material: &gltf::material::Material<'a>, 
         images: &'a Vec<gltf::image::Data>
-    ) -> Option<(&'a gltf::image::Data, MaterialImagePixels<'a>)> 
+    ) -> Option<MaterialImage<'a>> 
     {
         let normal = material.normal_texture()?;
         let image_index = normal.texture().source().index();
         let image = images.get(image_index)?;
         let pixels = MaterialImagePixels::new(image)?;
-        Some((image, pixels))
+        let image = MaterialImage::new(pixels, image.width, image.height);
+        Some(image)
     }
 
-    pub fn color_image(&self) -> Option<&'a gltf::image::Data> {
-        self.color_image_pixels.as_ref()
-            .map(|v| v.0)
+    pub fn color_image<'s>(&self) -> Option<&MaterialImage<'a>> {
+        self.color_image.as_ref()
     }
 
-    pub fn color_pixels(&self) -> Option<&MaterialImagePixels<'a>> {
-        self.color_image_pixels.as_ref()
-            .map(|v| &v.1)
+    pub fn normal_image(&self) -> Option<&MaterialImage<'a>> {
+        self.normal_image.as_ref()
+    }
+}
+
+pub struct MaterialImage<'a> {
+    pixels: MaterialImagePixels<'a>,
+    width: u32,
+    height: u32,
+}
+
+impl<'a> MaterialImage<'a> {
+    fn new(
+        pixels: MaterialImagePixels<'a>,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        Self {
+            pixels,
+            width,
+            height,
+        }
     }
 
-    pub fn normal_image(&self) -> Option<&'a gltf::image::Data> {
-        self.normal_image_pixels.as_ref()
-            .map(|v| v.0)
+    pub fn width(&self) -> u32 {
+        self.width
     }
 
-    pub fn normal_pixels(&self) -> Option<&MaterialImagePixels<'a>> {
-        self.normal_image_pixels.as_ref()
-            .map(|v| &v.1)
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    pub fn pixels(&self) -> &MaterialImagePixels<'a> {
+        &self.pixels
     }
 }
 
