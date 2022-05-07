@@ -8,8 +8,8 @@ use kaldera::base::*;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-const WIDTH: usize = 1600*2;
-const HEIGHT: usize = 900*2;
+const WIDTH: usize = 1600;
+const HEIGHT: usize = 900;
 
 struct Context {
     camera: Arc<Mutex<dyn Camera>>,

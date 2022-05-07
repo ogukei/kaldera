@@ -16,8 +16,12 @@ struct MeshPrimitiveDescription {
   uint vertexOffset;
   uint indexOffset;
   uint materialIndex;
-  uint reserved;
+  uint flags;
 };
+
+bool useColorMultipliers(uint flags) {
+  return ((flags & 1) != 0);
+}
 
 struct MaterialDescription {
   int colorTextureIndex;
@@ -136,12 +140,13 @@ void main() {
     worldNormal *= -1.0;
   }
   // Colors
-  vec4 colorMultiplier = vec4(1.0);
-  {
+  vec3 colorMultiplier = vec3(1.0);
+  if (useColorMultipliers(desc.flags)) {
     const vec4 c0 = colorAt(triangleIndex.x);
     const vec4 c1 = colorAt(triangleIndex.y);
     const vec4 c2 = colorAt(triangleIndex.z);
-    colorMultiplier = c0 * barycentrics.x + c1 * barycentrics.y + c2 * barycentrics.z;
+    const vec4 c = c0 * barycentrics.x + c1 * barycentrics.y + c2 * barycentrics.z;
+    colorMultiplier = c.rgb;
   }
   // Diffuse
   const vec3 lightPosition = vec3(9.0, 20.0, 8.0);
@@ -158,6 +163,6 @@ void main() {
     traceRayEXT(topLevelAS, flags, 0xff, 0, 0, 1, origin, tMin, direction, tMax, 1);
   }
   const float attenuation = (isShadowed) ? 0.3 : 1.0;
-  const vec3 finalColor = textureDiffuse * colorMultiplier.rgb * light * attenuation;
+  const vec3 finalColor = textureDiffuse * colorMultiplier * light * attenuation;
   payload.hitValue = finalColor;
 }
