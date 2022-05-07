@@ -30,6 +30,7 @@ pub struct SceneStagingBuffers {
     texcoord_buffer: Arc<DedicatedStagingBuffer>,
     material_description_buffer: Arc<DedicatedStagingBuffer>,
     tangent_buffer: Arc<DedicatedStagingBuffer>,
+    color_buffer: Arc<DedicatedStagingBuffer>,
 }
 
 impl SceneStagingBuffers {
@@ -104,6 +105,14 @@ impl SceneStagingBuffers {
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
             tangent_buffer_size as VkDeviceSize,
         ).unwrap();
+        let color_buffer_size = std::mem::size_of::<[f32; 4]>() * num_vertices;
+        let color_buffer = DedicatedStagingBuffer::new(
+            command_pool,
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
+                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
+            color_buffer_size as VkDeviceSize,
+        ).unwrap();
         // TODO(ogukei): concurrent uploads
         unsafe {
             index_buffer.update(index_buffer_size as VkDeviceSize, |data| {
@@ -170,6 +179,20 @@ impl SceneStagingBuffers {
                     }
                 }
             });
+            color_buffer.update(color_buffer_size as VkDeviceSize, |data| {
+                let data = data as *mut u8;
+                let slice = std::slice::from_raw_parts_mut(data as *mut f32, color_buffer_size / std::mem::size_of::<f32>());
+                slice.fill(1.0);
+                for primitive in primitives.iter() {
+                    if let Some(colors) = primitive.primitive().colors() {
+                        let byte_size = colors.count() * std::mem::size_of::<[f32; 4]>();
+                        let byte_offset = primitive.offset().vertex_offset * std::mem::size_of::<[f32; 4]>();
+                        let dst = data.offset(byte_offset as isize);
+                        let src = colors.data();
+                        std::ptr::copy_nonoverlapping(src, dst, byte_size);
+                    }
+                }
+            });
         }
         let buffer = Self {
             vertex_buffer,
@@ -179,6 +202,7 @@ impl SceneStagingBuffers {
             texcoord_buffer,
             material_description_buffer,
             tangent_buffer,
+            color_buffer,
         };
         Arc::new(buffer)
     }
@@ -216,5 +240,10 @@ impl SceneStagingBuffers {
     #[inline]
     pub fn tangent_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
         &self.tangent_buffer
+    }
+
+    #[inline]
+    pub fn color_buffer(&self) -> &Arc<DedicatedStagingBuffer> {
+        &self.color_buffer
     }
 }

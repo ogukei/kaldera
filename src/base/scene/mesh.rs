@@ -30,15 +30,14 @@ pub struct SceneMeshMaterial {
 
 impl SceneMeshMaterial {
     pub fn new(material: &Material, command_pool: &Arc<CommandPool>) -> Arc<Self> {
-        let color_texture = material.color_pixels()
-            .map(|pixels| {
-                let image = material.color_image().unwrap();
-                let pixels = pixels.pixels();
+        let color_texture = material.color_image()
+            .map(|image| {
+                let pixels = image.pixels().pixels();
                 let data = pixels.as_ptr() as *const c_void;
                 let data_size = pixels.len();
                 let extent = VkExtent3D {
-                    width: image.width,
-                    height: image.height,
+                    width: image.width(),
+                    height: image.height(),
                     depth: 1,
                 };
                 let device = command_pool.queue().device();
@@ -47,15 +46,14 @@ impl SceneMeshMaterial {
                 let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
                 texture
             });
-        let normal_texture = material.normal_pixels()
-            .map(|pixels| {
-                let image = material.normal_image().unwrap();
-                let pixels = pixels.pixels();
+        let normal_texture = material.normal_image()
+            .map(|image| {
+                let pixels = image.pixels().pixels();
                 let data = pixels.as_ptr() as *const c_void;
                 let data_size = pixels.len();
                 let extent = VkExtent3D {
-                    width: image.width,
-                    height: image.height,
+                    width: image.width(),
+                    height: image.height(),
                     depth: 1,
                 };
                 let device = command_pool.queue().device();

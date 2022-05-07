@@ -8,8 +8,8 @@ use kaldera::base::*;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-const WIDTH: usize = 1600;
-const HEIGHT: usize = 900;
+const WIDTH: usize = 1600*2;
+const HEIGHT: usize = 900*2;
 
 struct Context {
     camera: Arc<Mutex<dyn Camera>>,
@@ -103,6 +103,7 @@ fn raytracing_render(surface: &Arc<Surface>) -> Context {
         dummy_staging_buffer,
         scene.material_description_staging_buffer(),
         scene.tangent_staging_buffer(),
+        scene.color_staging_buffer(),
     )
         .unwrap();
     let raytracing_render = RayTracingGraphicsRender::new(&command_pool, &raytracing_pipeline, &descriptor_sets)
