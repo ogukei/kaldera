@@ -49,7 +49,8 @@ impl SceneStagingBuffers {
             command_pool, 
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT as VkBufferUsageFlags 
                 | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
-                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags
+                | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR as VkBufferUsageFlags,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
             vertex_buffer_size as VkDeviceSize,
         ).unwrap();
@@ -58,7 +59,8 @@ impl SceneStagingBuffers {
             command_pool, 
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT as VkBufferUsageFlags 
                 | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT as  VkBufferUsageFlags
-                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags,
+                | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT as VkBufferUsageFlags
+                | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR as VkBufferUsageFlags,
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
             index_buffer_size as VkDeviceSize,
         ).unwrap();

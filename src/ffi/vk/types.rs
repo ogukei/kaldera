@@ -3073,4 +3073,11 @@ extern "C" {
         stride: VkDeviceSize,
         flags: VkQueryResultFlags,
     ) -> VkResult;
+    // @see https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/vkCmdResetQueryPool.html
+    pub fn vkCmdResetQueryPool(
+        commandBuffer: VkCommandBuffer,
+        queryPool: VkQueryPool,
+        firstQuery: u32,
+        queryCount: u32,
+    );
 }
