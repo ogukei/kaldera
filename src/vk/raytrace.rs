@@ -564,6 +564,12 @@ impl AccelerationStructureCompactionQueryPool {
     fn handle(&self) -> VkQueryPool {
         self.handle
     }
+
+    fn command_reset(&self, command_buffer_handle: VkCommandBuffer) {
+        unsafe {
+            vkCmdResetQueryPool(command_buffer_handle, self.handle, 0, self.query_count as u32);
+        }
+    }
 }
 
 impl Drop for AccelerationStructureCompactionQueryPool {
@@ -750,6 +756,8 @@ impl<'a> BottomLevelAccelerationStructuresBuilder<'a> {
                     .unwrap();
                 let recording = CommandBufferRecording::new_onetime_submit(command_pool)
                     .unwrap();
+                // reset queries in the query pool before the query pool used
+                query_pool.command_reset(recording.command_buffer());
                 let build_processes: Vec<_> = builds.into_iter()
                     .map(|v| v.begin(&recording, &scratch_buffer_memory, &query_pool))
                     .collect();
