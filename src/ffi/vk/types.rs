@@ -59,6 +59,7 @@ pub type VkSamplerCreateFlags = VkFlags;
 pub type VkMemoryAllocateFlags = VkFlags;
 pub type VkQueryPoolCreateFlags = VkFlags;
 pub type VkQueryResultFlags = VkFlags;
+pub type VkDescriptorBindingFlags = VkFlags;
 
 #[repr(C)]
 pub struct VkInstanceOpaque { _private: [u8; 0] }
@@ -2487,6 +2488,55 @@ pub enum VkQueryResultFlagBits {
     VK_QUERY_RESULT_WAIT_BIT = 0x00000002,
     VK_QUERY_RESULT_WITH_AVAILABILITY_BIT = 0x00000004,
     VK_QUERY_RESULT_PARTIAL_BIT = 0x00000008,
+}
+
+// @see https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkDescriptorPoolCreateFlagBits.html
+#[repr(C)]
+pub enum VkDescriptorPoolCreateFlagBits {
+    VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT = 0x00000001,
+  // Provided by VK_VERSION_1_2
+    VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT = 0x00000002,
+  // Provided by VK_VALVE_mutable_descriptor_type
+    VK_DESCRIPTOR_POOL_CREATE_HOST_ONLY_BIT_VALVE = 0x00000004,
+}
+
+// @see https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkDescriptorSetLayoutBindingFlagsCreateInfoEXT.html
+#[repr(C)]
+pub struct VkDescriptorSetLayoutBindingFlagsCreateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub bindingCount: u32,
+    pub pBindingFlags: *const VkDescriptorBindingFlags,
+}
+
+// @see https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkDescriptorBindingFlagBits.html
+#[repr(C)]
+pub enum VkDescriptorBindingFlagBits {
+    VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT = 0x00000001,
+    VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT = 0x00000002,
+    VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT = 0x00000004,
+    VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT = 0x00000008,
+}
+
+
+// @see https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkDescriptorSetLayoutCreateFlagBits.html
+#[repr(C)]
+pub enum VkDescriptorSetLayoutCreateFlagBits {
+// Provided by VK_VERSION_1_2
+    VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT = 0x00000002,
+// Provided by VK_KHR_push_descriptor
+    VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR = 0x00000001,
+// Provided by VK_VALVE_mutable_descriptor_type
+    VK_DESCRIPTOR_SET_LAYOUT_CREATE_HOST_ONLY_POOL_BIT_VALVE = 0x00000004,
+}
+
+// @see https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkDescriptorSetVariableDescriptorCountAllocateInfo.html
+#[repr(C)]
+pub struct VkDescriptorSetVariableDescriptorCountAllocateInfo {
+    pub sType: VkStructureType,
+    pub pNext: *const c_void,
+    pub descriptorSetCount: u32,
+    pub pDescriptorCounts: *const u32,
 }
 
 #[link(name = "vulkan")]
