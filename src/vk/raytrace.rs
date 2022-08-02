@@ -17,6 +17,8 @@ use std::ffi::CString;
 use VkStructureTypeExtRay::*;
 use VkStructureType::*;
 
+const TEXTURES_MAX_COUNT: usize = 65535;
+
 pub enum BottomLevelAccelerationStructureGeometry {
     Triangles(BottomLevelAccelerationStructureTriangles),
 }
@@ -1022,14 +1024,579 @@ impl TopLevelAccelerationStructure {
     }
 }
 
+struct DescriptorSetLayout {
+    device: Arc<Device>,
+    handle: VkDescriptorSetLayout,
+}
 
+impl DescriptorSetLayout {
+    unsafe fn new_primary(device: &Arc<Device>, textures_count: usize) -> Arc<Self> {
+        let bindings = vec![
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
+                0,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32,
+                1,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32,
+                2,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                3,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                4,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                5,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                6,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                7,
+            ),
+            VkDescriptorSetLayoutBinding::new_array(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                8,
+                textures_count,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32 
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_INTERSECTION_BIT_KHR as u32,
+                9,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                10,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                11,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                12,
+            ),
+            VkDescriptorSetLayoutBinding::new(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                13,
+            ),
+        ];
+        let mut handle = MaybeUninit::<VkDescriptorSetLayout>::zeroed();
+        let create_info = VkDescriptorSetLayoutCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            bindingCount: bindings.len() as u32,
+            pBindings: bindings.as_ptr(),
+        };
+        vkCreateDescriptorSetLayout(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
+            .into_result()
+            .unwrap();
+        let handle = handle.assume_init();
+        let this = Self {
+            device: Arc::clone(device),
+            handle: handle,
+        };
+        Arc::new(this)
+    }
 
+    unsafe fn new_secondary(device: &Arc<Device>) -> Arc<Self> {
+        let bindings = vec![
+            VkDescriptorSetLayoutBinding::new_array(
+                VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 
+                VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
+                    | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
+                8,
+                TEXTURES_MAX_COUNT,
+            ),
+        ];
+        let mut handle = MaybeUninit::<VkDescriptorSetLayout>::zeroed();
+        let binding_flags = VkDescriptorBindingFlagBits::VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT as VkFlags
+            | VkDescriptorBindingFlagBits::VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT as VkFlags
+            | VkDescriptorBindingFlagBits::VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT as VkFlags;
+        let binding_info = VkDescriptorSetLayoutBindingFlagsCreateInfo {
+            sType: VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+            pNext: ptr::null(),
+            bindingCount: bindings.len() as u32,
+            pBindingFlags: &binding_flags,
+        };
+        let flags = VkDescriptorSetLayoutCreateFlagBits::VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT as VkFlags;
+        let create_info = VkDescriptorSetLayoutCreateInfo {
+            sType: VkStructureType::VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            pNext: ptr::null(),
+            flags: 0,
+            bindingCount: bindings.len() as u32,
+            pBindings: bindings.as_ptr(),
+        };
+        vkCreateDescriptorSetLayout(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
+            .into_result()
+            .unwrap();
+        let handle = handle.assume_init();
+        let this = Self {
+            device: Arc::clone(device),
+            handle,
+        };
+        Arc::new(this)
+    }
+
+    fn handle(&self) -> VkDescriptorSetLayout {
+        self.handle
+    }
+}
+
+impl Drop for DescriptorSetLayout {
+    fn drop(&mut self) {
+        log_debug!("Drop DescriptorSetLayout");
+        unsafe {
+            vkDestroyDescriptorSetLayout(self.device.handle(), self.handle, ptr::null());
+        }
+    }
+}
+
+struct DescriptorPool {
+    handle: VkDescriptorPool,
+    device: Arc<Device>,
+}
+
+impl DescriptorPool {
+    unsafe fn new_primary(device: &Arc<Device>, textures_count: usize) -> Arc<Self> {
+        let mut handle = MaybeUninit::<VkDescriptorPool>::zeroed();
+        {
+            let sizes = vec![
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, textures_count as u32),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
+            ];
+            let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr());
+            vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let handle = handle.assume_init();
+        let this = Self {
+            handle,
+            device: Arc::clone(device),
+        };
+        Arc::new(this)
+    }
+
+    unsafe fn new_secondary(device: &Arc<Device>) -> Arc<Self> {
+        let mut handle = MaybeUninit::<VkDescriptorPool>::zeroed();
+        {
+            let sizes = vec![
+                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, TEXTURES_MAX_COUNT as u32),
+            ];
+            let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr());
+            vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let handle = handle.assume_init();
+        let this = Self {
+            handle,
+            device: Arc::clone(device),
+        };
+        Arc::new(this)
+    }
+
+    fn handle(&self) -> VkDescriptorPool {
+        self.handle
+    }
+}
+
+impl Drop for DescriptorPool {
+    fn drop(&mut self) {
+        unsafe {
+            vkDestroyDescriptorPool(self.device.handle(), self.handle, ptr::null());
+        }
+    }
+}
+
+struct DescriptorSet {
+    descriptor_pool: Arc<DescriptorPool>,
+    descriptor_set_layout: Arc<DescriptorSetLayout>,
+    handle: VkDescriptorSet,
+}
+
+impl DescriptorSet {
+    unsafe fn new_primary(descriptor_set_layout: &Arc<DescriptorSetLayout>, descriptor_pool: &Arc<DescriptorPool>) -> Arc<Self> {
+        let device = &descriptor_pool.device;
+        let mut handle = MaybeUninit::<VkDescriptorSet>::zeroed();
+        {
+            let descriptor_set_layout = descriptor_set_layout.handle();
+            let alloc_info = VkDescriptorSetAllocateInfo {
+                sType: VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                pNext: ptr::null(),
+                descriptorPool: descriptor_pool.handle(),
+                descriptorSetCount: 1,
+                pSetLayouts: &descriptor_set_layout,
+            };
+            vkAllocateDescriptorSets(device.handle(), &alloc_info, handle.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let handle = handle.assume_init();
+        let this = Self {
+            handle,
+            descriptor_pool: Arc::clone(descriptor_pool),
+            descriptor_set_layout: Arc::clone(descriptor_set_layout),
+        };
+        Arc::new(this)
+    }
+
+    unsafe fn new_secondary(descriptor_set_layout: &Arc<DescriptorSetLayout>, descriptor_pool: &Arc<DescriptorPool>) -> Arc<Self> {
+        let device = &descriptor_pool.device;
+        let mut handle = MaybeUninit::<VkDescriptorSet>::zeroed();
+        {
+            let descriptor_set_layout = descriptor_set_layout.handle();
+            let count: u32 = TEXTURES_MAX_COUNT as u32 - 1;
+            let count_info = VkDescriptorSetVariableDescriptorCountAllocateInfo {
+                sType: VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO,
+                pNext: ptr::null(),
+                descriptorSetCount: 1,
+                pDescriptorCounts: &count,
+            };
+            let alloc_info = VkDescriptorSetAllocateInfo {
+                sType: VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                pNext: &count_info as *const _ as *const c_void,
+                descriptorPool: descriptor_pool.handle(),
+                descriptorSetCount: 1,
+                pSetLayouts: &descriptor_set_layout,
+            };
+            vkAllocateDescriptorSets(device.handle(), &alloc_info, handle.as_mut_ptr())
+                .into_result()
+                .unwrap();
+        }
+        let handle = handle.assume_init();
+        let this = Self {
+            handle,
+            descriptor_pool: Arc::clone(descriptor_pool),
+            descriptor_set_layout: Arc::clone(descriptor_set_layout),
+        };
+        Arc::new(this)
+    }
+
+    fn handle(&self) -> VkDescriptorSet {
+        self.handle
+    }
+}
+
+struct PrimaryDescriptorSet {
+    device: Arc<Device>,
+    pipeline: Arc<RayTracingGraphicsPipeline>,
+    descriptor_set_layout: Arc<DescriptorSetLayout>,
+    descriptor_set_pool: Arc<DescriptorPool>,
+    descriptor_set: Arc<DescriptorSet>,
+
+    acceleration_structure: Arc<TopLevelAccelerationStructure>,
+    storage_image: Arc<ColorImage>,
+    scene_uniform_buffer: Arc<UniformBuffer>,
+    vertex_storage_buffer: Arc<DedicatedStagingBuffer>,
+    index_storage_buffer: Arc<DedicatedStagingBuffer>,
+    normal_storage_buffer: Arc<DedicatedStagingBuffer>,
+    description_storage_buffer: Arc<DedicatedStagingBuffer>,
+    texcoord_storage_buffer: Arc<DedicatedStagingBuffer>,
+    textures: Vec<Arc<Texture>>,
+    sphere_storage_buffer: Arc<DedicatedStagingBuffer>,
+    material_storage_buffer: Arc<DedicatedStagingBuffer>,
+    material_description_storage_buffer: Arc<DedicatedStagingBuffer>,
+    tangent_storage_buffer: Arc<DedicatedStagingBuffer>,
+    color_storage_buffer: Arc<DedicatedStagingBuffer>,
+}
+
+impl PrimaryDescriptorSet {
+    unsafe fn new(
+        pipeline: &Arc<RayTracingGraphicsPipeline>, 
+        descriptor_set_layout: &Arc<DescriptorSetLayout>,
+        descriptor_set_pool: &Arc<DescriptorPool>,
+        descriptor_set: &Arc<DescriptorSet>,
+
+        acceleration_structure: &Arc<TopLevelAccelerationStructure>,
+        storage_image: &Arc<ColorImage>,
+        scene_uniform_buffer: &Arc<UniformBuffer>,
+        vertex_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        index_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        normal_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        description_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        texcoord_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        textures: &[Arc<Texture>],
+        sphere_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        material_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        material_description_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        tangent_storage_buffer: &Arc<DedicatedStagingBuffer>,
+        color_storage_buffer: &Arc<DedicatedStagingBuffer>,
+    ) -> Arc<Self> {
+        let device = pipeline.device();
+        let acceleration_structure_handle = acceleration_structure.handle();
+        let write_acceleration_structure_info = VkWriteDescriptorSetAccelerationStructureKHR {
+            sType: VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+            pNext: ptr::null(),
+            accelerationStructureCount: 1,
+            pAccelerationStructures: &acceleration_structure_handle,
+        };
+        let write_acceleration_structure = VkWriteDescriptorSet {
+            sType: VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            pNext: &write_acceleration_structure_info as *const _ as *const c_void,
+            dstSet: descriptor_set.handle(),
+            dstBinding: 0,
+            dstArrayElement: 0,
+            descriptorCount: 1,
+            descriptorType: VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+            pImageInfo: ptr::null(),
+            pBufferInfo: ptr::null(),
+            pTexelBufferView: ptr::null(),
+        };
+        let write_image_info = VkDescriptorImageInfo {
+            sampler: ptr::null_mut(),
+            imageView: storage_image.view(),
+            imageLayout: VkImageLayout::VK_IMAGE_LAYOUT_GENERAL,
+        };
+        let write_image = VkWriteDescriptorSet::from_image(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+            1,
+            &write_image_info);
+        let write_uniform_buffer_info = VkDescriptorBufferInfo {
+            buffer: scene_uniform_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: scene_uniform_buffer.device_buffer_memory().size(),
+        };
+        let write_uniform_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            2,
+            &write_uniform_buffer_info);
+        let write_vertex_buffer_info = VkDescriptorBufferInfo {
+            buffer: vertex_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: vertex_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_vertex_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            3,
+            &write_vertex_buffer_info);
+        let write_index_buffer_info = VkDescriptorBufferInfo {
+            buffer: index_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: index_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_index_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            4,
+            &write_index_buffer_info);
+        let write_normal_buffer_info = VkDescriptorBufferInfo {
+            buffer: normal_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: normal_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_normal_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            5,
+            &write_normal_buffer_info);
+        let write_description_buffer_info = VkDescriptorBufferInfo {
+            buffer: description_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: description_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_description_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            6,
+            &write_description_buffer_info);
+        let write_texcoord_buffer_info = VkDescriptorBufferInfo {
+            buffer: texcoord_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: texcoord_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_texcoord_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            7,
+            &write_texcoord_buffer_info);
+        let textures: Vec<_> = textures.iter().map(Arc::clone).collect();
+        let texture_descriptors: Vec<VkDescriptorImageInfo> = textures.iter()
+            .map(|v| v.descriptor())
+            .collect();
+        let write_texture_images = VkWriteDescriptorSet::from_image_array(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            8,
+            texture_descriptors.len(),
+            texture_descriptors.as_ptr());
+        let write_sphere_buffer_info = VkDescriptorBufferInfo {
+            buffer: sphere_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: sphere_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_sphere_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            9,
+            &write_sphere_buffer_info);
+        let write_material_buffer_info = VkDescriptorBufferInfo {
+            buffer: material_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: material_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_material_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            10,
+            &write_material_buffer_info);
+        let write_material_description_buffer_info = VkDescriptorBufferInfo {
+            buffer: material_description_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: material_description_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_material_description_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            11,
+            &write_material_description_buffer_info);
+        let write_tangent_buffer_info = VkDescriptorBufferInfo {
+            buffer: tangent_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: tangent_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_tangent_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            12,
+            &write_tangent_buffer_info);
+        let write_color_buffer_info = VkDescriptorBufferInfo {
+            buffer: color_storage_buffer.device_buffer_memory().buffer(),
+            offset: 0,
+            range: color_storage_buffer.device_buffer_memory().size(),
+        };
+        let write_color_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+            13,
+            &write_color_buffer_info);
+        let write_descriptor_sets = vec![
+            write_acceleration_structure,
+            write_image,
+            write_uniform_buffer,
+            write_vertex_buffer,
+            write_index_buffer,
+            write_normal_buffer,
+            write_description_buffer,
+            write_texcoord_buffer,
+            write_texture_images,
+            write_sphere_buffer,
+            write_material_buffer,
+            write_material_description_buffer,
+            write_tangent_buffer,
+            write_color_buffer,
+        ];
+        vkUpdateDescriptorSets(device.handle(), 
+            write_descriptor_sets.len() as u32, 
+            write_descriptor_sets.as_ptr(), 
+            0, 
+            ptr::null());
+        let descriptors = Self {
+            device: Arc::clone(device),
+            pipeline: Arc::clone(pipeline),
+            descriptor_set_layout: Arc::clone(descriptor_set_layout),
+            descriptor_set_pool: Arc::clone(descriptor_set_pool),
+            descriptor_set: Arc::clone(descriptor_set),
+            acceleration_structure: Arc::clone(acceleration_structure),
+            storage_image: Arc::clone(storage_image),
+            scene_uniform_buffer: Arc::clone(scene_uniform_buffer),
+            vertex_storage_buffer: Arc::clone(vertex_storage_buffer),
+            index_storage_buffer: Arc::clone(index_storage_buffer),
+            normal_storage_buffer: Arc::clone(normal_storage_buffer),
+            description_storage_buffer: Arc::clone(description_storage_buffer),
+            texcoord_storage_buffer: Arc::clone(texcoord_storage_buffer),
+            textures,
+            sphere_storage_buffer: Arc::clone(sphere_storage_buffer),
+            material_storage_buffer: Arc::clone(material_storage_buffer),
+            material_description_storage_buffer: Arc::clone(material_description_storage_buffer),
+            tangent_storage_buffer: Arc::clone(tangent_storage_buffer),
+            color_storage_buffer: Arc::clone(color_storage_buffer),
+        };
+        Arc::new(descriptors)
+    }
+
+    fn handle(&self) -> VkDescriptorSet {
+        self.descriptor_set.handle()
+    }
+}
+
+struct SecondaryDescriptorSet {
+    device: Arc<Device>,
+    pipeline: Arc<RayTracingGraphicsPipeline>,
+    descriptor_set_layout: Arc<DescriptorSetLayout>,
+    descriptor_set_pool: Arc<DescriptorPool>,
+    descriptor_set: Arc<DescriptorSet>,
+}
+
+impl SecondaryDescriptorSet {
+    unsafe fn new(
+        pipeline: &Arc<RayTracingGraphicsPipeline>, 
+        descriptor_set_layout: &Arc<DescriptorSetLayout>,
+        descriptor_set_pool: &Arc<DescriptorPool>,
+        descriptor_set: &Arc<DescriptorSet>,
+    ) -> Arc<Self> {
+        let device = pipeline.device();
+        let descriptors = Self {
+            device: Arc::clone(device),
+            pipeline: Arc::clone(pipeline),
+            descriptor_set_layout: Arc::clone(descriptor_set_layout),
+            descriptor_set_pool: Arc::clone(descriptor_set_pool),
+            descriptor_set: Arc::clone(descriptor_set),
+        };
+        Arc::new(descriptors)
+    }
+
+    fn handle(&self) -> VkDescriptorSet {
+        self.descriptor_set.handle()
+    }
+}
 
 pub struct RayTracingGraphicsPipeline {
     device: Arc<Device>,
     layout: VkPipelineLayout,
     handle: VkPipeline,
-    descriptor_set_layout: VkDescriptorSetLayout,
+    primary_descriptor_set_layout: Arc<DescriptorSetLayout>,
+    secondary_descriptor_set_layout: Arc<DescriptorSetLayout>,
     shader_group_count: u32,
 }
 
@@ -1044,105 +1611,19 @@ impl RayTracingGraphicsPipeline {
     }
 
     unsafe fn init(device: &Arc<Device>, textures_count: usize) -> Result<Arc<Self>> {
-        // Descriptor Set Layout
-        let mut descriptor_set_layout = MaybeUninit::<VkDescriptorSetLayout>::zeroed();
-        {
-            let bindings = vec![
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32,
-                    0,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32,
-                    1,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_RAYGEN_BIT_KHR as u32,
-                    2,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
-                    3,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
-                    4,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
-                    5,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
-                    6,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
-                    7,
-                ),
-                VkDescriptorSetLayoutBinding::new_array(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
-                    8,
-                    textures_count,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32 
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_INTERSECTION_BIT_KHR as u32,
-                    9,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
-                    10,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
-                    11,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
-                    12,
-                ),
-                VkDescriptorSetLayoutBinding::new(
-                    VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 
-                    VkShaderStageFlagBits::VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR as u32
-                        | VkShaderStageFlagBits::VK_SHADER_STAGE_ANY_HIT_BIT_KHR as u32,
-                    13,
-                ),
-            ];
-            let create_info = VkDescriptorSetLayoutCreateInfo::new(bindings.len() as u32, bindings.as_ptr());
-            vkCreateDescriptorSetLayout(device.handle(), &create_info, ptr::null(), descriptor_set_layout.as_mut_ptr())
-                .into_result()
-                .unwrap();
-        }
-        let descriptor_set_layout = descriptor_set_layout.assume_init();
+        let primary_descriptor_set_layout = DescriptorSetLayout::new_primary(device, textures_count);
+        let secondary_descriptor_set_layout = DescriptorSetLayout::new_secondary(device);
+        let descriptor_set_layouts = vec![
+            &primary_descriptor_set_layout,
+            &secondary_descriptor_set_layout,
+        ];
+        let descriptor_set_layout_handles: Vec<_> = descriptor_set_layouts.iter()
+            .map(|v| v.handle())
+            .collect();
         // Pipeline Layout
         let mut pipeline_layout = MaybeUninit::<VkPipelineLayout>::zeroed();
         {
-            let create_info = VkPipelineLayoutCreateInfo::new(1, &descriptor_set_layout);
+            let create_info = VkPipelineLayoutCreateInfo::new(descriptor_set_layout_handles.len() as u32, descriptor_set_layout_handles.as_ptr());
             vkCreatePipelineLayout(device.handle(), &create_info, ptr::null(), pipeline_layout.as_mut_ptr())
                 .into_result()
                 .unwrap();
@@ -1308,7 +1789,8 @@ impl RayTracingGraphicsPipeline {
             device: Arc::clone(device),
             layout: pipeline_layout,
             handle,
-            descriptor_set_layout,
+            primary_descriptor_set_layout,
+            secondary_descriptor_set_layout,
             shader_group_count: shader_groups.len() as u32,
         };
         Ok(Arc::new(layout))
@@ -1325,17 +1807,22 @@ impl RayTracingGraphicsPipeline {
     }
 
     #[inline]
-    pub fn descriptor_set_layout(&self) -> VkDescriptorSetLayout {
-        self.descriptor_set_layout
-    }
-
-    #[inline]
     pub fn device(&self) -> &Arc<Device> {
         &self.device
     }
 
     pub fn shader_group_count(&self) -> u32 {
         self.shader_group_count
+    }
+
+    #[inline]
+    fn primary_descriptor_set_layout(&self) -> &Arc<DescriptorSetLayout> {
+        &self.primary_descriptor_set_layout
+    }
+
+    #[inline]
+    fn secondary_descriptor_set_layout(&self) -> &Arc<DescriptorSetLayout> {
+        &self.secondary_descriptor_set_layout
     }
 }
 
@@ -1345,31 +1832,14 @@ impl Drop for RayTracingGraphicsPipeline {
         unsafe {
             let device = &self.device;
             vkDestroyPipelineLayout(device.handle(), self.layout, ptr::null());
-            vkDestroyDescriptorSetLayout(device.handle(), self.descriptor_set_layout, ptr::null());
             vkDestroyPipeline(device.handle(), self.handle, ptr::null());
         }
     }
 }
 
 pub struct RayTracingDescriptorSets {
-    device: Arc<Device>,
-    pipeline: Arc<RayTracingGraphicsPipeline>,
-    acceleration_structure: Arc<TopLevelAccelerationStructure>,
-    storage_image: Arc<ColorImage>,
-    scene_uniform_buffer: Arc<UniformBuffer>,
-    vertex_storage_buffer: Arc<DedicatedStagingBuffer>,
-    index_storage_buffer: Arc<DedicatedStagingBuffer>,
-    normal_storage_buffer: Arc<DedicatedStagingBuffer>,
-    description_storage_buffer: Arc<DedicatedStagingBuffer>,
-    texcoord_storage_buffer: Arc<DedicatedStagingBuffer>,
-    textures: Vec<Arc<Texture>>,
-    sphere_storage_buffer: Arc<DedicatedStagingBuffer>,
-    material_storage_buffer: Arc<DedicatedStagingBuffer>,
-    material_description_storage_buffer: Arc<DedicatedStagingBuffer>,
-    tangent_storage_buffer: Arc<DedicatedStagingBuffer>,
-    color_storage_buffer: Arc<DedicatedStagingBuffer>,
-    descriptor_pool: VkDescriptorPool,
-    descriptor_set: VkDescriptorSet,
+    primary: Arc<PrimaryDescriptorSet>,
+    secondary: Arc<SecondaryDescriptorSet>,
 }
 
 impl RayTracingDescriptorSets {
@@ -1391,7 +1861,13 @@ impl RayTracingDescriptorSets {
         color_storage_buffer: &Arc<DedicatedStagingBuffer>,
     ) -> Result<Arc<Self>> {
         unsafe {
-            Self::init(pipeline, 
+            let primary_descriptor_pool = DescriptorPool::new_primary(pipeline.device(), textures.len());
+            let primary_descriptor_set = DescriptorSet::new_primary(pipeline.primary_descriptor_set_layout(), &primary_descriptor_pool);
+            let primary = PrimaryDescriptorSet::new(
+                pipeline,
+                pipeline.primary_descriptor_set_layout(),
+                &primary_descriptor_pool,
+                &primary_descriptor_set,
                 acceleration_structure, 
                 storage_image, 
                 scene_uniform_buffer, 
@@ -1406,254 +1882,20 @@ impl RayTracingDescriptorSets {
                 material_description_storage_buffer,
                 tangent_storage_buffer,
                 color_storage_buffer,
-            )
-        }
-    }
-
-    unsafe fn init(
-        pipeline: &Arc<RayTracingGraphicsPipeline>, 
-        acceleration_structure: &Arc<TopLevelAccelerationStructure>,
-        storage_image: &Arc<ColorImage>,
-        scene_uniform_buffer: &Arc<UniformBuffer>,
-        vertex_storage_buffer: &Arc<DedicatedStagingBuffer>,
-        index_storage_buffer: &Arc<DedicatedStagingBuffer>,
-        normal_storage_buffer: &Arc<DedicatedStagingBuffer>,
-        description_storage_buffer: &Arc<DedicatedStagingBuffer>,
-        texcoord_storage_buffer: &Arc<DedicatedStagingBuffer>,
-        textures: &[Arc<Texture>],
-        sphere_storage_buffer: &Arc<DedicatedStagingBuffer>,
-        material_storage_buffer: &Arc<DedicatedStagingBuffer>,
-        material_description_storage_buffer: &Arc<DedicatedStagingBuffer>,
-        tangent_storage_buffer: &Arc<DedicatedStagingBuffer>,
-        color_storage_buffer: &Arc<DedicatedStagingBuffer>,
-    ) -> Result<Arc<Self>> {
-        let device = pipeline.device();
-        // Descriptor Pool
-        let mut descriptor_pool = MaybeUninit::<VkDescriptorPool>::zeroed();
-        {
-            let sizes = vec![
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, textures.len() as u32),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-                VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
-            ];
-            let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr());
-            vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), descriptor_pool.as_mut_ptr())
-                .into_result()
-                .unwrap();
-        }
-        let descriptor_pool = descriptor_pool.assume_init();
-        // Allocate Descriptor Set
-        let mut descriptor_set = MaybeUninit::<VkDescriptorSet>::zeroed();
-        {
-            let descriptor_set_layout = pipeline.descriptor_set_layout();
-            let alloc_info = VkDescriptorSetAllocateInfo::new(descriptor_pool, 1, &descriptor_set_layout);
-            vkAllocateDescriptorSets(device.handle(), &alloc_info, descriptor_set.as_mut_ptr())
-                .into_result()
-                .unwrap();
-        }
-        let descriptor_set = descriptor_set.assume_init();
-        let acceleration_structure_handle = acceleration_structure.handle();
-        let write_acceleration_structure_info = VkWriteDescriptorSetAccelerationStructureKHR {
-            sType: VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
-            pNext: ptr::null(),
-            accelerationStructureCount: 1,
-            pAccelerationStructures: &acceleration_structure_handle,
-        };
-        let write_acceleration_structure = VkWriteDescriptorSet {
-            sType: VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            pNext: &write_acceleration_structure_info as *const _ as *const c_void,
-            dstSet: descriptor_set,
-            dstBinding: 0,
-            dstArrayElement: 0,
-            descriptorCount: 1,
-            descriptorType: VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
-            pImageInfo: ptr::null(),
-            pBufferInfo: ptr::null(),
-            pTexelBufferView: ptr::null(),
-        };
-        let write_image_info = VkDescriptorImageInfo {
-            sampler: ptr::null_mut(),
-            imageView: storage_image.view(),
-            imageLayout: VkImageLayout::VK_IMAGE_LAYOUT_GENERAL,
-        };
-        let write_image = VkWriteDescriptorSet::from_image(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-            1,
-            &write_image_info);
-        let write_uniform_buffer_info = VkDescriptorBufferInfo {
-            buffer: scene_uniform_buffer.device_buffer_memory().buffer(),
-            offset: 0,
-            range: scene_uniform_buffer.device_buffer_memory().size(),
-        };
-        let write_uniform_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            2,
-            &write_uniform_buffer_info);
-        let write_vertex_buffer_info = VkDescriptorBufferInfo {
-            buffer: vertex_storage_buffer.device_buffer_memory().buffer(),
-            offset: 0,
-            range: vertex_storage_buffer.device_buffer_memory().size(),
-        };
-        let write_vertex_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            3,
-            &write_vertex_buffer_info);
-        let write_index_buffer_info = VkDescriptorBufferInfo {
-            buffer: index_storage_buffer.device_buffer_memory().buffer(),
-            offset: 0,
-            range: index_storage_buffer.device_buffer_memory().size(),
-        };
-        let write_index_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            4,
-            &write_index_buffer_info);
-        let write_normal_buffer_info = VkDescriptorBufferInfo {
-            buffer: normal_storage_buffer.device_buffer_memory().buffer(),
-            offset: 0,
-            range: normal_storage_buffer.device_buffer_memory().size(),
-        };
-        let write_normal_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            5,
-            &write_normal_buffer_info);
-        let write_description_buffer_info = VkDescriptorBufferInfo {
-            buffer: description_storage_buffer.device_buffer_memory().buffer(),
-            offset: 0,
-            range: description_storage_buffer.device_buffer_memory().size(),
-        };
-        let write_description_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            6,
-            &write_description_buffer_info);
-        let write_texcoord_buffer_info = VkDescriptorBufferInfo {
-            buffer: texcoord_storage_buffer.device_buffer_memory().buffer(),
-            offset: 0,
-            range: texcoord_storage_buffer.device_buffer_memory().size(),
-        };
-        let write_texcoord_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            7,
-            &write_texcoord_buffer_info);
-        let textures: Vec<_> = textures.iter().map(Arc::clone).collect();
-        let texture_descriptors: Vec<VkDescriptorImageInfo> = textures.iter()
-            .map(|v| v.descriptor())
-            .collect();
-        let write_texture_images = VkWriteDescriptorSet::from_image_array(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            8,
-            texture_descriptors.len(),
-            texture_descriptors.as_ptr());
-        let write_sphere_buffer_info = VkDescriptorBufferInfo {
-            buffer: sphere_storage_buffer.device_buffer_memory().buffer(),
-            offset: 0,
-            range: sphere_storage_buffer.device_buffer_memory().size(),
-        };
-        let write_sphere_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            9,
-            &write_sphere_buffer_info);
-        let write_material_buffer_info = VkDescriptorBufferInfo {
-            buffer: material_storage_buffer.device_buffer_memory().buffer(),
-            offset: 0,
-            range: material_storage_buffer.device_buffer_memory().size(),
-        };
-        let write_material_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            10,
-            &write_material_buffer_info);
-        let write_material_description_buffer_info = VkDescriptorBufferInfo {
-            buffer: material_description_storage_buffer.device_buffer_memory().buffer(),
-            offset: 0,
-            range: material_description_storage_buffer.device_buffer_memory().size(),
-        };
-        let write_material_description_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            11,
-            &write_material_description_buffer_info);
-        let write_tangent_buffer_info = VkDescriptorBufferInfo {
-            buffer: tangent_storage_buffer.device_buffer_memory().buffer(),
-            offset: 0,
-            range: tangent_storage_buffer.device_buffer_memory().size(),
-        };
-        let write_tangent_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            12,
-            &write_tangent_buffer_info);
-        let write_color_buffer_info = VkDescriptorBufferInfo {
-            buffer: color_storage_buffer.device_buffer_memory().buffer(),
-            offset: 0,
-            range: color_storage_buffer.device_buffer_memory().size(),
-        };
-        let write_color_buffer = VkWriteDescriptorSet::from_buffer(descriptor_set, 
-            VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            13,
-            &write_color_buffer_info);
-        let write_descriptor_sets = vec![
-            write_acceleration_structure,
-            write_image,
-            write_uniform_buffer,
-            write_vertex_buffer,
-            write_index_buffer,
-            write_normal_buffer,
-            write_description_buffer,
-            write_texcoord_buffer,
-            write_texture_images,
-            write_sphere_buffer,
-            write_material_buffer,
-            write_material_description_buffer,
-            write_tangent_buffer,
-            write_color_buffer,
-        ];
-        vkUpdateDescriptorSets(device.handle(), 
-            write_descriptor_sets.len() as u32, 
-            write_descriptor_sets.as_ptr(), 
-            0, 
-            ptr::null());
-        let descriptors = Self {
-            device: Arc::clone(device),
-            pipeline: Arc::clone(pipeline),
-            acceleration_structure: Arc::clone(acceleration_structure),
-            storage_image: Arc::clone(storage_image),
-            scene_uniform_buffer: Arc::clone(scene_uniform_buffer),
-            vertex_storage_buffer: Arc::clone(vertex_storage_buffer),
-            index_storage_buffer: Arc::clone(index_storage_buffer),
-            normal_storage_buffer: Arc::clone(normal_storage_buffer),
-            description_storage_buffer: Arc::clone(description_storage_buffer),
-            texcoord_storage_buffer: Arc::clone(texcoord_storage_buffer),
-            textures,
-            sphere_storage_buffer: Arc::clone(sphere_storage_buffer),
-            material_storage_buffer: Arc::clone(material_storage_buffer),
-            material_description_storage_buffer: Arc::clone(material_description_storage_buffer),
-            tangent_storage_buffer: Arc::clone(tangent_storage_buffer),
-            color_storage_buffer: Arc::clone(color_storage_buffer),
-            descriptor_pool,
-            descriptor_set,
-        };
-        Ok(Arc::new(descriptors))
-    }
-
-    #[inline]
-    pub fn handle(&self) -> VkDescriptorSet {
-        self.descriptor_set
-    }
-}
-
-impl Drop for RayTracingDescriptorSets {
-    fn drop(&mut self) {
-        unsafe {
-            let device = &self.device;
-            vkDestroyDescriptorPool(device.handle(), self.descriptor_pool, ptr::null());
+            );
+            let secondary_descriptor_pool = DescriptorPool::new_secondary(pipeline.device());
+            let secondary_descriptor_set = DescriptorSet::new_secondary(pipeline.secondary_descriptor_set_layout(), &secondary_descriptor_pool);
+            let secondary = SecondaryDescriptorSet::new(
+                pipeline,
+                pipeline.secondary_descriptor_set_layout(),
+                &secondary_descriptor_pool,
+                &secondary_descriptor_set,
+            );
+            let this = Self {
+                primary,
+                secondary,
+            };
+            Ok(Arc::new(this))
         }
     }
 }
@@ -1820,10 +2062,13 @@ impl RayTracingGraphicsRender {
     pub unsafe fn command(&self, command_buffer: VkCommandBuffer, area: VkRect2D) {
         let device = self.command_pool.queue().device();
         let shader_binding_table = &self.shader_binding_table;
-        let descriptor_set = self.descriptor_sets.handle();
         vkCmdBindPipeline(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, self.pipeline.handle());
+        let primary_set = self.descriptor_sets.primary.handle();
         vkCmdBindDescriptorSets(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
-            self.pipeline.layout(), 0, 1, &descriptor_set, 0, ptr::null());
+            self.pipeline.layout(), 0, 1, &primary_set, 0, ptr::null());
+        let secondary_set = self.descriptor_sets.secondary.handle();
+        vkCmdBindDescriptorSets(command_buffer, VkPipelineBindPoint::VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR,
+            self.pipeline.layout(), 1, 1, &secondary_set, 0, ptr::null());
         dispatch_vkCmdTraceRaysKHR(device.handle(), 
             command_buffer, 
             shader_binding_table.raygen_entry(), 
