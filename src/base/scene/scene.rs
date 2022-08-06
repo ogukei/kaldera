@@ -3,7 +3,9 @@ use gltf;
 use nalgebra_glm as glm;
 
 use std::sync::Arc;
+use std::sync::Mutex;
 
+use super::image_provider::ImageProvider;
 use crate::vk::Result;
 use crate::vk::*;
 use crate::ffi::vk::*;
@@ -14,20 +16,21 @@ use super::procedural::*;
 use super::asset::*;
 use super::mesh::*;
 use super::buffer::*;
+use super::material_repository::*;
 
-pub struct SceneBuilder<'a> {
-    asset: &'a SceneAsset,
+pub struct SceneBuilder {
+    asset: Arc<SceneAsset>,
 }
 
-impl<'a> SceneBuilder<'a> {
-    pub fn new(asset: &'a SceneAsset) -> Self {
+impl SceneBuilder {
+    pub fn new(asset: &Arc<SceneAsset>) -> Self {
         Self {
-            asset,
+            asset: Arc::clone(asset),
         }
     }
 
     pub fn build(self, command_pool: &Arc<CommandPool>) -> Scene {
-        let asset = self.asset;
+        let asset = &self.asset;
         log_debug!("start scene builder");
         let table = MeshTable::new(asset);
         log_debug!("iterating nodes");
@@ -46,29 +49,36 @@ impl<'a> SceneBuilder<'a> {
         log_debug!("iterating materials");
         let materials: Vec<_> = asset.document().materials()
             .into_iter()
-            .map(|v| Material::new(v, asset.images()))
+            .map(|v| Material::new(v))
             .collect();
         log_debug!("iterating materials complete");
-        Scene::new(&table, &nodes, &materials, command_pool)
+        Scene::new(asset, &table, &nodes, &materials, command_pool)
     }
 }
 
 pub struct Scene {
+    asset: Arc<SceneAsset>,
+    command_pool: Arc<CommandPool>,
     primitives: Vec<Arc<SceneMeshPrimitive>>,
     staging_buffers: Arc<SceneStagingBuffers>,
     top_level_acceleration_structure: Arc<TopLevelAccelerationStructure>,
-    materials: Vec<Arc<SceneMeshMaterial>>,
-    textures: Vec<Arc<Texture>>,
+    material_repository: Arc<MaterialRepository>,
+    state: Mutex<SceneState>,
 }
 
 impl Scene {
-    fn new(table: &MeshTable, nodes: &[MeshNode], materials: &[Material], command_pool: &Arc<CommandPool>) -> Self {
+    fn new(asset: &Arc<SceneAsset>, table: &MeshTable, nodes: &[MeshNode], materials: &[Material], command_pool: &Arc<CommandPool>) -> Self {
         let primitives = table.mesh_primitives();
         log_debug!("creating material images");
-        let descriptions_textures = MaterialDescriptionsTextures::new(materials, command_pool);
+        let image_provider = ImageProvider::new(asset);
+        let descriptions_textures = MaterialDescriptionsTextures::new(
+            materials,
+            &image_provider,
+            command_pool);
+        let material_repository = MaterialRepository::new(descriptions_textures);
         log_debug!("creating material images complete");
         log_debug!("creating staging buffers");
-        let staging_buffers = SceneStagingBuffers::new(command_pool, primitives, &descriptions_textures.descriptions);
+        let staging_buffers = SceneStagingBuffers::new(command_pool, primitives, material_repository.state().descriptions());
         log_debug!("creating staging buffers complete");
         log_debug!("building blas");
         let scene_mesh_primitive_geometries: Vec<_> = table.mesh_primitives().iter()
@@ -119,11 +129,13 @@ impl Scene {
         log_debug!("building tlas complete");
         log_debug!("scene building complete");
         Self {
+            asset: Arc::clone(asset),
+            command_pool: Arc::clone(command_pool),
             primitives: scene_mesh_primitives,
             staging_buffers,
             top_level_acceleration_structure,
-            materials: descriptions_textures.materials,
-            textures: descriptions_textures.textures,
+            material_repository,
+            state: Mutex::new(SceneState::new())
         }
     }
 
@@ -163,8 +175,31 @@ impl Scene {
         &self.staging_buffers.color_buffer()
     }
 
-    pub fn textures(&self) -> &Vec<Arc<Texture>> {
-        &self.textures
+    pub fn textures(&self) -> Vec<Arc<Texture>> {
+        // copying Vec for some convenience
+        let state = self.material_repository.state();
+        let textures = state.textures();
+        textures.iter()
+            .map(|v| Arc::clone(v))
+            .collect()
+    }
+
+    pub fn update(&self, delta_time: f32, descriptor_sets: &Arc<RayTracingDescriptorSets>) {
+        self.state.lock().unwrap().update(self, delta_time, descriptor_sets);
     }
 }
 
+struct SceneState {
+
+}
+
+impl SceneState {
+    fn new() -> Self { 
+        Self {
+        } 
+    }
+
+    fn update(&mut self, scene: &Scene, delta_time: f32, descriptor_sets: &Arc<RayTracingDescriptorSets>) {
+
+    }
+}

@@ -9,6 +9,7 @@ pub type Result<T> = result::Result<T, Error>;
 pub enum ErrorCode {
     VkResult(VkResult),
     FFI(std::ffi::NulError),
+    Io,
     SuitablePhysicalDeviceNotFound,
     SuitableBufferMemoryTypeNotFound,
     SuitableImageMemoryTypeNotFound,
@@ -19,6 +20,7 @@ pub enum ErrorCode {
     ShaderLoadIO(std::io::Error),
     ShaderLoadUnaligned,
     ImageFormatInvalid,
+    ImageNotFound,
 }
 
 #[derive(Debug)]

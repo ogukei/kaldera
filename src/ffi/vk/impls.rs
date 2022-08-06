@@ -249,11 +249,11 @@ impl VkDescriptorPoolSize {
 }
 
 impl VkDescriptorPoolCreateInfo {
-    pub fn new(max_sets: u32, count: u32, sizes: *const VkDescriptorPoolSize) -> Self {
+    pub fn new(max_sets: u32, count: u32, sizes: *const VkDescriptorPoolSize, flags: VkFlags) -> Self {
         VkDescriptorPoolCreateInfo {
             sType: VkStructureType::VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
             pNext: ptr::null(),
-            flags: 0,
+            flags: flags,
             maxSets: max_sets,
             poolSizeCount: count,
             pPoolSizes: sizes,
