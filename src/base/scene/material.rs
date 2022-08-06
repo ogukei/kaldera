@@ -3,68 +3,125 @@ use gltf;
 use nalgebra_glm as glm;
 
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::marker::PhantomData;
+use std::sync::{Arc, Mutex};
 
 use crate::vk::Result;
 use crate::vk::*;
 use crate::ffi::vk::*;
 
-use libc::c_void;
-
-use gltf::accessor::DataType;
-use gltf::accessor::Dimensions;
-use gltf::Semantic;
-
-use VkMemoryPropertyFlagBits::*;
-use VkBufferUsageFlagBits::*;
-
 use super::mesh::*;
+use super::image_provider::ImageProvider;
+
+use super::image as scene_image;
 
 pub struct Material<'a> {
     material: gltf::material::Material<'a>,
-    color_image: Option<MaterialImage<'a>>,
-    normal_image: Option<MaterialImage<'a>>,
 }
 
 impl<'a> Material<'a> {
-    pub fn new(material: gltf::material::Material<'a>, images: &'a Vec<gltf::image::Data>) -> Self {
-        let color_image = Self::color_info(&material, images);
-        let normal_image = Self::normal_info(&material, images);
+    pub fn new(material: gltf::material::Material<'a>) -> Self {
         Self {
             material,
-            color_image,
-            normal_image,
         }
     }
 
-    fn color_info(
-        material: &gltf::material::Material<'a>, 
-        images: &'a Vec<gltf::image::Data>
-    ) -> Option<MaterialImage<'a>> 
+    pub fn name(&self) -> Option<&'a str> {
+        self.material.name()
+    }
+
+    pub fn image_sources(&self) -> MaterialImageSources {
+        MaterialImageSources::new(&self.material)
+    }
+
+    fn material(&self) -> &gltf::material::Material<'a> {
+        &self.material
+    }
+}
+
+pub struct MaterialImageSources {
+    pub color_image_index: Option<usize>,
+    pub normal_image_index: Option<usize>,
+}
+
+impl MaterialImageSources {
+    fn new(material: &gltf::material::Material) -> Self { 
+        let color_image_index = Self::color_image_index(material);
+        let normal_image_index = Self::normal_image_index(material);
+        Self { color_image_index, normal_image_index }
+    }
+
+    fn color_image_index(
+        material: &gltf::material::Material,
+    ) -> Option<usize>
     {
         let model = material.pbr_metallic_roughness();
         let color = model.base_color_texture()?;
         let image_index = color.texture().source().index();
-        let image = images.get(image_index)?;
-        let pixels = MaterialImagePixels::new(image)?;
-        let image = MaterialImage::new(pixels, image.width, image.height);
-        Some(image)
+        Some(image_index)
     }
 
-    fn normal_info(
-        material: &gltf::material::Material<'a>, 
-        images: &'a Vec<gltf::image::Data>
-    ) -> Option<MaterialImage<'a>> 
+    fn normal_image_index(
+        material: &gltf::material::Material, 
+    ) -> Option<usize>
     {
         let normal = material.normal_texture()?;
         let image_index = normal.texture().source().index();
-        let image = images.get(image_index)?;
-        let pixels = MaterialImagePixels::new(image)?;
-        let image = MaterialImage::new(pixels, image.width, image.height);
-        Some(image)
+        Some(image_index)
+    }
+}
+
+pub struct MaterialImageData {
+    color_image: Option<scene_image::Data>,
+    normal_image: Option<scene_image::Data>,
+}
+
+impl MaterialImageData {
+    pub fn new(material: &Material, image_provider: &ImageProvider) -> Result<Self> { 
+        let sources = MaterialImageSources::new(material.material());
+        let color_image = sources.color_image_index
+            .map(|index| image_provider.image(index)
+                .ok_or_else(|| ErrorCode::ImageNotFound))
+            .transpose()?;
+        let normal_image = sources.normal_image_index
+            .map(|index| image_provider.image(index)
+                .ok_or_else(|| ErrorCode::ImageNotFound))
+            .transpose()?;
+        let this = Self { color_image, normal_image };
+        Ok(this)
     }
 
-    pub fn color_image<'s>(&self) -> Option<&MaterialImage<'a>> {
+    pub fn color_image_data(&self) -> Option<&scene_image::Data> {
+        self.color_image.as_ref()
+    }
+
+    pub fn normal_image_data(&self) -> Option<&scene_image::Data> {
+        self.normal_image.as_ref()
+    }
+}
+
+pub struct MaterialImages<'a> {
+    color_image: Option<MaterialImage<'a>>,
+    normal_image: Option<MaterialImage<'a>>,
+}
+
+impl<'a> MaterialImages<'a> {
+    pub fn new(data: &'a MaterialImageData) -> Result<Self> { 
+        let color_image = data.color_image_data()
+            .map(|data| MaterialImagePixels::new(data)
+                .ok_or_else(|| ErrorCode::ImageFormatInvalid)
+                .map(|v| MaterialImage::new(v, data.width, data.height)))
+            .transpose()?;
+        let normal_image = data.normal_image_data()
+            .map(|data| MaterialImagePixels::new(data)
+                .ok_or_else(|| ErrorCode::ImageFormatInvalid)
+                .map(|v| MaterialImage::new(v, data.width, data.height)))
+            .transpose()?;
+        let this = Self { color_image, normal_image };
+        Ok(this)
+    }
+
+    pub fn color_image(&self) -> Option<&MaterialImage<'a>> {
         self.color_image.as_ref()
     }
 
@@ -80,6 +137,7 @@ pub struct MaterialImage<'a> {
 }
 
 impl<'a> MaterialImage<'a> {
+
     fn new(
         pixels: MaterialImagePixels<'a>,
         width: u32,
@@ -111,8 +169,8 @@ pub enum MaterialImagePixels<'a> {
 }
 
 impl<'a> MaterialImagePixels<'a> {
-    fn new(image: &'a gltf::image::Data) -> Option<Self> {
-        use gltf::image::Format;
+    fn new(image: &'a scene_image::Data) -> Option<Self> {
+        use scene_image::Format;
         match image.format {
             Format::R8G8B8 => {
                 let bytes = image.width as usize * image.height as usize * 4usize;
@@ -152,9 +210,10 @@ pub struct MaterialDescriptionsTextures {
 }
 
 impl MaterialDescriptionsTextures {
-    pub fn new(materials: &[Material], command_pool: &Arc<CommandPool>) -> Self {
+    pub fn new(materials: &[Material], image_provider: &ImageProvider, command_pool: &Arc<CommandPool>) -> Self {
         let materials: Vec<_> = materials.iter()
-            .map(|v| SceneMeshMaterial::new(v, command_pool))
+            .map(|v| SceneMeshMaterial::new(v, image_provider, command_pool))
+            //.map(|v| SceneMeshMaterial::new_placeholder(command_pool))
             .collect();
         let mut descriptions: Vec<SceneMaterialDescription> = vec![];
         let mut textures: Vec<Arc<Texture>> = vec![];
@@ -186,5 +245,30 @@ impl MaterialDescriptionsTextures {
             textures,
             materials,
         }
+    }
+
+    pub fn replace_material(&mut self, command_pool: &Arc<CommandPool>, image_provider: &ImageProvider, material: &Material, material_index: usize) {
+        let mesh_material = SceneMeshMaterial::new(material, image_provider, command_pool);
+        // color
+        let color_texture_index: i32;
+        if let Some(color_texture) = mesh_material.color_texture() {
+            color_texture_index = self.textures.len() as i32;
+            self.textures.push(Arc::clone(color_texture));
+        } else {
+            color_texture_index = -1;
+        }
+        // normal
+        let normal_texture_index: i32;
+        if let Some(normal_texture) = mesh_material.normal_texture() {
+            normal_texture_index = self.textures.len() as i32;
+            self.textures.push(Arc::clone(normal_texture));
+        } else {
+            normal_texture_index = -1;
+        }
+        let desc = SceneMaterialDescription {
+            color_texture_index,
+            normal_texture_index,
+        };
+        self.descriptions[material_index] = desc;
     }
 }

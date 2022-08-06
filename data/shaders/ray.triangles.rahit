@@ -29,7 +29,7 @@ layout(binding = 4) readonly buffer Indices { uint indices[]; };
 layout(binding = 5) readonly buffer Normals { float normals[]; };
 layout(binding = 6) readonly buffer Descriptions { MeshPrimitiveDescription descriptions[]; };
 layout(binding = 7) readonly buffer Texcoords { float texcoords[]; };
-layout(binding = 8) uniform sampler2D textures[];
+layout(set = 1, binding = 8) uniform sampler2D textures[];
 layout(binding = 11) readonly buffer Materials { MaterialDescription materials[]; };
 
 vec3 vertexAt(uint index) {

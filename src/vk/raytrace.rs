@@ -1159,8 +1159,8 @@ impl DescriptorSetLayout {
         let flags = VkDescriptorSetLayoutCreateFlagBits::VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT as VkFlags;
         let create_info = VkDescriptorSetLayoutCreateInfo {
             sType: VkStructureType::VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            pNext: ptr::null(),
-            flags: 0,
+            pNext: &binding_info as *const _ as *const c_void,
+            flags: flags,
             bindingCount: bindings.len() as u32,
             pBindings: bindings.as_ptr(),
         };
@@ -1214,7 +1214,7 @@ impl DescriptorPool {
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1),
             ];
-            let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr());
+            let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr(), 0);
             vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
                 .into_result()
                 .unwrap();
@@ -1233,7 +1233,8 @@ impl DescriptorPool {
             let sizes = vec![
                 VkDescriptorPoolSize::new(VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, TEXTURES_MAX_COUNT as u32),
             ];
-            let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr());
+            let flags = VkDescriptorPoolCreateFlagBits::VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT as VkFlags;
+            let create_info = VkDescriptorPoolCreateInfo::new(1, sizes.len() as u32, sizes.as_ptr(), flags);
             vkCreateDescriptorPool(device.handle(), &create_info, ptr::null(), handle.as_mut_ptr())
                 .into_result()
                 .unwrap();
@@ -1566,6 +1567,7 @@ struct SecondaryDescriptorSet {
     descriptor_set_layout: Arc<DescriptorSetLayout>,
     descriptor_set_pool: Arc<DescriptorPool>,
     descriptor_set: Arc<DescriptorSet>,
+    textures: Vec<Arc<Texture>>,
 }
 
 impl SecondaryDescriptorSet {
@@ -1574,20 +1576,59 @@ impl SecondaryDescriptorSet {
         descriptor_set_layout: &Arc<DescriptorSetLayout>,
         descriptor_set_pool: &Arc<DescriptorPool>,
         descriptor_set: &Arc<DescriptorSet>,
+        textures: &[Arc<Texture>],
     ) -> Arc<Self> {
         let device = pipeline.device();
+        let textures: Vec<_> = textures.iter().map(Arc::clone).collect();
+        let texture_descriptors: Vec<VkDescriptorImageInfo> = textures.iter()
+            .map(|v| v.descriptor())
+            .collect();
+        let write_texture_images = VkWriteDescriptorSet::from_image_array(descriptor_set.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            8,
+            texture_descriptors.len(),
+            texture_descriptors.as_ptr());
+        let write_descriptor_sets = vec![
+            write_texture_images,
+        ];
+        vkUpdateDescriptorSets(device.handle(), 
+            write_descriptor_sets.len() as u32, 
+            write_descriptor_sets.as_ptr(), 
+            0, 
+            ptr::null());
         let descriptors = Self {
             device: Arc::clone(device),
             pipeline: Arc::clone(pipeline),
             descriptor_set_layout: Arc::clone(descriptor_set_layout),
             descriptor_set_pool: Arc::clone(descriptor_set_pool),
             descriptor_set: Arc::clone(descriptor_set),
+            textures,
         };
         Arc::new(descriptors)
     }
 
     fn handle(&self) -> VkDescriptorSet {
         self.descriptor_set.handle()
+    }
+
+    unsafe fn update_textures(&self, textures: &[Arc<Texture>]) {
+        let textures: Vec<_> = textures.iter().map(Arc::clone).collect();
+        let texture_descriptors: Vec<VkDescriptorImageInfo> = textures.iter()
+            .map(|v| v.descriptor())
+            .collect();
+        let write_texture_images = VkWriteDescriptorSet::from_image_array(self.handle(), 
+            VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            8,
+            texture_descriptors.len(),
+            texture_descriptors.as_ptr());
+        let write_descriptor_sets = vec![
+            write_texture_images,
+        ];
+        vkUpdateDescriptorSets(self.device.handle(), 
+            write_descriptor_sets.len() as u32, 
+            write_descriptor_sets.as_ptr(), 
+            0, 
+            ptr::null());
     }
 }
 
@@ -1890,12 +1931,19 @@ impl RayTracingDescriptorSets {
                 pipeline.secondary_descriptor_set_layout(),
                 &secondary_descriptor_pool,
                 &secondary_descriptor_set,
+                textures,
             );
             let this = Self {
                 primary,
                 secondary,
             };
             Ok(Arc::new(this))
+        }
+    }
+
+    pub fn update_textures(&self, textures: &[Arc<Texture>]) {
+        unsafe {
+            self.secondary.update_textures(textures)
         }
     }
 }

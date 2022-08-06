@@ -1,5 +1,4 @@
 
-
 macro_rules! log_debug {
     () => { println!() };
     ($($arg:tt)*) => { 
@@ -41,7 +40,7 @@ pub use geometry::*;
 pub use model::*;
 
 pub use staging::*;
-pub use image::*;
+pub use crate::vk::image::*;
 pub use swapchain::*;
 pub use render::*;
 pub use offscreen::*;

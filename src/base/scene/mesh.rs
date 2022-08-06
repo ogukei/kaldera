@@ -19,6 +19,7 @@ use VkMemoryPropertyFlagBits::*;
 use VkBufferUsageFlagBits::*;
 
 use super::asset::*;
+use super::image_provider::ImageProvider;
 use super::material::*;
 use super::buffer::*;
 use super::primitive::*;
@@ -29,8 +30,11 @@ pub struct SceneMeshMaterial {
 }
 
 impl SceneMeshMaterial {
-    pub fn new(material: &Material, command_pool: &Arc<CommandPool>) -> Arc<Self> {
-        let color_texture = material.color_image()
+    pub fn new(material: &Material, image_provider: &ImageProvider, command_pool: &Arc<CommandPool>) -> Arc<Self> {
+        log_debug!("loading material {}", material.name().unwrap_or(""));
+        let image_data = MaterialImageData::new(material, image_provider).unwrap();
+        let images = MaterialImages::new(&image_data).unwrap();
+        let color_texture = images.color_image()
             .map(|image| {
                 let pixels = image.pixels().pixels();
                 let data = pixels.as_ptr() as *const c_void;
@@ -46,7 +50,7 @@ impl SceneMeshMaterial {
                 let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
                 texture
             });
-        let normal_texture = material.normal_image()
+        let normal_texture = images.normal_image()
             .map(|image| {
                 let pixels = image.pixels().pixels();
                 let data = pixels.as_ptr() as *const c_void;
