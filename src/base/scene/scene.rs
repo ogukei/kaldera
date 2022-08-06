@@ -190,45 +190,16 @@ impl Scene {
 }
 
 struct SceneState {
-    elapsed_time: f32,
-    index: usize,
+
 }
 
 impl SceneState {
     fn new() -> Self { 
         Self {
-            elapsed_time: 0.0,
-            index: 0,
         } 
     }
 
     fn update(&mut self, scene: &Scene, delta_time: f32, descriptor_sets: &Arc<RayTracingDescriptorSets>) {
-        self.elapsed_time += delta_time;
-        if self.elapsed_time < 30.0 { return }
-    
-        let material_index = self.index;
-        let mut state = scene.material_repository.state();
-        let image_provider = ImageProvider::new(&scene.asset);
-        let materials: Vec<_> = scene.asset.document().materials()
-            .into_iter()
-            .map(|v| Material::new(v))
-            .collect();
-        if let Some(material) = materials.get(material_index) {
-            state.replace_material(&scene.command_pool, &image_provider, material, material_index);
-            //
-            descriptor_sets.update_textures(state.textures());
-            //
-            let buffer = scene.material_description_staging_buffer();
-            let descriptions = state.descriptions();
-            let size = std::mem::size_of::<SceneMaterialDescription>() * descriptions.len();
-            unsafe {
-                buffer.update(size as VkDeviceSize, |data| {
-                    let dst = data as *mut u8;
-                    let src = descriptions.as_ptr() as *const u8;
-                    std::ptr::copy_nonoverlapping(src, dst, size);
-                });
-            }
-        }
-        self.index += 1;
+
     }
 }

@@ -37,7 +37,6 @@ impl SceneAsset {
         let Gltf { document, blob } = Gltf::from_reader(reader)
             .map_err(|_| ErrorCode::Io)?;
         let buffers = import_buffer_data(&document, Some(base), blob)?;
-        //gltf::import
         log_debug!("loading scene asset complete");
         let asset = Self {
             document,
