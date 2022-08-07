@@ -1,16 +1,13 @@
 
 use crate::ffi::vk::*;
 use super::error::Result;
-use super::error::ErrorCode;
-use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
-use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource, CommandBufferRecording};
-use super::memory::{StorageBuffer, UniformBuffer, DedicatedBufferMemory, DedicatedStagingBuffer};
+use super::device::{Device, CommandPool, ShaderModule, ShaderModuleSource, CommandBufferRecording};
+use super::memory::{UniformBuffer, DedicatedBufferMemory, DedicatedStagingBuffer};
 use super::image::{ColorImage, Texture};
 
 use std::ptr;
-use std::mem;
 use std::mem::MaybeUninit;
-use libc::{c_float, c_void, size_t};
+use libc::{c_void, size_t};
 use std::sync::Arc;
 use std::ffi::CString;
 
@@ -132,7 +129,7 @@ impl BottomLevelAccelerationStructureTriangles {
         num_vertices: u32,
         vertex_stride: VkDeviceSize,
         vertex_buffer_memory: &Arc<DedicatedBufferMemory>,
-        num_indices: u32,
+        _num_indices: u32,
         index_buffer_memory: &Arc<DedicatedBufferMemory>,
         is_opaque: bool
     ) -> VkAccelerationStructureGeometryKHR {
@@ -251,6 +248,7 @@ impl Drop for AccelerationStructureBufferMemory {
 }
 
 // represents an internal acceleration structure both in and after build
+#[allow(dead_code)]
 struct AccelerationStructure {
     handle: VkAccelerationStructureKHR,
     buffer_memory: Arc<AccelerationStructureBufferMemory>,
@@ -299,6 +297,7 @@ impl AccelerationStructure {
         &self.device
     }
 
+    #[allow(dead_code)]
     fn size(&self) -> VkDeviceSize {
         self.size
     }
@@ -329,6 +328,7 @@ impl BottomLevelAccelerationStructureBuildQuery {
     }
 }
 
+#[allow(dead_code)]
 struct BottomLevelAccelerationStructureBuild {
     device: Arc<Device>,
     geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
@@ -582,6 +582,7 @@ impl Drop for AccelerationStructureCompactionQueryPool {
     }
 }
 
+#[allow(dead_code)]
 struct BottomLevelAccelerationStructureBuildProcess {
     geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
     structure: Arc<AccelerationStructure>,
@@ -641,6 +642,7 @@ impl BottomLevelAccelerationStructureBuildProcess {
     }
 }
 
+#[allow(dead_code)]
 struct BottomLevelAccelerationStructureCompactionProcess {
     geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
     original_structure: Arc<AccelerationStructure>,
@@ -672,6 +674,7 @@ impl BottomLevelAccelerationStructureCompactionProcess {
 }
 
 // represents a complete built structure
+#[allow(dead_code)]
 pub struct BottomLevelAccelerationStructure {
     geometries: Vec<Arc<BottomLevelAccelerationStructureGeometry>>,
     structure: Arc<AccelerationStructure>,
@@ -831,6 +834,7 @@ impl TopLevelAccelerationStructureInstance {
     }
 
     #[inline]
+    #[allow(dead_code)]
     fn transform(&self) -> VkTransformMatrixKHR {
         self.transform.clone()
     }
@@ -853,6 +857,7 @@ impl TopLevelAccelerationStructureInstance {
     }
 }
 
+#[allow(dead_code)]
 pub struct TopLevelAccelerationStructure {
     instances_buffer: Arc<DedicatedStagingBuffer>,
     structure: Arc<AccelerationStructure>,
@@ -1260,6 +1265,7 @@ impl Drop for DescriptorPool {
     }
 }
 
+#[allow(dead_code)]
 struct DescriptorSet {
     descriptor_pool: Arc<DescriptorPool>,
     descriptor_set_layout: Arc<DescriptorSetLayout>,
@@ -1329,6 +1335,7 @@ impl DescriptorSet {
     }
 }
 
+#[allow(dead_code)]
 struct PrimaryDescriptorSet {
     device: Arc<Device>,
     pipeline: Arc<RayTracingGraphicsPipeline>,
@@ -1561,6 +1568,7 @@ impl PrimaryDescriptorSet {
     }
 }
 
+#[allow(dead_code)]
 struct SecondaryDescriptorSet {
     device: Arc<Device>,
     pipeline: Arc<RayTracingGraphicsPipeline>,
@@ -1948,6 +1956,7 @@ impl RayTracingDescriptorSets {
     }
 }
 
+#[allow(dead_code)]
 pub struct ShaderBindingTable {
     storage_buffer: Arc<DedicatedStagingBuffer>,
     pipeline: Arc<RayTracingGraphicsPipeline>,
@@ -2069,6 +2078,7 @@ impl ShaderBindingTable {
     }
 }
 
+#[allow(dead_code)]
 pub struct RayTracingGraphicsRender {
     command_pool: Arc<CommandPool>,
     pipeline: Arc<RayTracingGraphicsPipeline>,

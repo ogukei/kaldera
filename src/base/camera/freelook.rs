@@ -40,7 +40,7 @@ impl FreeLookCamera {
         }
     }
 
-    fn rotate(&mut self, x: f32, y: f32, delta_time: f32) {
+    fn rotate(&mut self, x: f32, y: f32, _delta_time: f32) {
         let x = (x / 600.0) * glm::pi::<f32>();
         let y = (y / 600.0) * glm::pi::<f32>();
         self.rotation_x += x;
@@ -82,7 +82,7 @@ impl Camera for FreeLookCamera {
         }
     }
 
-    fn update(&mut self, delta_time: f32) {
+    fn update(&mut self, _delta_time: f32) {
         // TODO(ogukei): adjust speed by over time
         let a = 0.6;
         self.position_smooth = glm::lerp_vec(&self.position_smooth, &self.position_target, &glm::vec3(a, a, a));

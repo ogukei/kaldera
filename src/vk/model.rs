@@ -1,5 +1,5 @@
 
-use super::geometry::{Vec3, Vec4, Mat4};
+use super::geometry::{Vec3, Mat4};
 use super::Result;
 
 use std::sync::Arc;

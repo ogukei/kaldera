@@ -1,5 +1,4 @@
 
-
 use super::SceneAsset;
 use super::image as scene_image;
 

@@ -2,12 +2,10 @@
 use crate::ffi::vk::*;
 use super::error::Result;
 use super::error::ErrorCode;
-use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
+use super::instance::{QueueFamily, PhysicalDevice};
 
 use std::ptr;
-use std::mem;
 use std::mem::MaybeUninit;
-use libc::{c_float, c_void};
 use std::sync::Arc;
 use std::io::Read;
 

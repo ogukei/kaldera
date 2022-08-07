@@ -2,22 +2,17 @@
 use crate::ffi::vk::*;
 use super::error::Result;
 use super::error::ErrorCode;
-use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
-use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
-use super::memory::{StagingBuffer, StagingBufferUsage};
-use super::swapchain::{SwapchainFramebuffers, SwapchainFramebuffer, SceneRenderPass};
+use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder};
+use super::swapchain::{SwapchainFramebuffers, SwapchainFramebuffer};
 use super::offscreen::{OffscreenGraphicsRender};
 use super::scene::{SceneGraphicsRender};
 use super::raytrace::{RayTracingGraphicsRender};
 
 use std::ptr;
-use std::mem;
 use std::mem::MaybeUninit;
-use libc::{c_float, c_void};
 use std::sync::Arc;
-use std::io::Read;
-use std::ffi::CString;
 
+#[allow(dead_code)]
 pub struct GraphicsRender {
     frames: Vec<GraphicsFramePrerender>,
     swapchain_framebuffers: Arc<SwapchainFramebuffers>,

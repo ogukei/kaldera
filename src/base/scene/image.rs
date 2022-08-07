@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 
 // ported from the gltf-rs because their library does not support glTF imports excluding images but including documents and buffers
 // @see https://docs.rs/gltf/latest/src/gltf/import.rs.html#234-239

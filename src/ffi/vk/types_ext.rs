@@ -2,7 +2,7 @@
 #![allow(dead_code)]
 #![allow(non_camel_case_types, non_snake_case)]
 
-use libc::{c_void, c_char, size_t, c_float};
+use libc::{c_void};
 
 use super::types::*;
 

@@ -1,18 +1,10 @@
 
 use crate::ffi::vk::*;
-use super::error::Result;
-use super::error::ErrorCode;
-use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
-use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
-use super::memory::{StagingBuffer, StagingBufferUsage, DedicatedStagingBuffer};
+use super::device::{CommandPool};
+use super::memory::{StagingBuffer, StagingBufferUsage};
 
-use std::ptr;
-use std::mem;
-use std::mem::MaybeUninit;
-use libc::{c_float, c_void};
+use libc::{c_void};
 use std::sync::Arc;
-use std::io::Read;
-use std::ffi::CString;
 
 pub struct VertexStagingBuffer {
     vertex_buffer: Arc<StagingBuffer>,

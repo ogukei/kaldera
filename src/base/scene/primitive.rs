@@ -1,22 +1,9 @@
 
 use gltf;
-use nalgebra_glm as glm;
-
-use std::collections::HashMap;
-use std::sync::Arc;
-
-use crate::vk::Result;
-use crate::vk::*;
-use crate::ffi::vk::*;
-
-use libc::c_void;
 
 use gltf::accessor::DataType;
 use gltf::accessor::Dimensions;
 use gltf::Semantic;
-
-use VkMemoryPropertyFlagBits::*;
-use VkBufferUsageFlagBits::*;
 
 pub struct Primitive<'a> {
     indices: Indices<'a>,

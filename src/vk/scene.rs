@@ -1,22 +1,17 @@
 
 use crate::ffi::vk::*;
 use super::error::Result;
-use super::error::ErrorCode;
-use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
-use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
-use super::memory::{StagingBuffer, StagingBufferUsage};
-use super::swapchain::{SwapchainFramebuffers, SwapchainFramebuffer, SceneRenderPass};
+use super::device::{Device, ShaderModule, ShaderModuleSource};
+use super::swapchain::{SwapchainFramebuffer, SceneRenderPass};
 use super::image::ColorImage;
-use super::offscreen::{OffscreenFramebuffer, OffscreenGraphicsPipeline};
 
 use std::ptr;
-use std::mem;
 use std::mem::MaybeUninit;
-use libc::{c_float, c_void};
+use libc::{c_float};
 use std::sync::Arc;
-use std::io::Read;
 use std::ffi::CString;
 
+#[allow(dead_code)]
 pub struct SceneGraphicsPipelineLayout {
     device: Arc<Device>,
     handle: VkPipelineLayout,

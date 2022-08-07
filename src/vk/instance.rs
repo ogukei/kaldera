@@ -3,7 +3,6 @@
 use crate::ffi::vk::*;
 
 use super::error::Result;
-use super::error::ErrorCode;
 use super::debug::{DebugUtilsMessenger};
 
 use std::ptr;
@@ -295,6 +294,7 @@ impl PhysicalDevice {
     }
 }
 
+#[allow(dead_code)]
 pub struct PhysicalDeviceFeatures {
     features: Box<MaybeUninit<VkPhysicalDeviceFeatures2>>,
     device_address: Box<MaybeUninit<VkPhysicalDeviceBufferDeviceAddressFeatures>>,

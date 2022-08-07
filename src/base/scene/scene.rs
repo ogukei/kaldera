@@ -1,18 +1,14 @@
 
-use gltf;
 use nalgebra_glm as glm;
 
 use std::sync::Arc;
 use std::sync::Mutex;
 
 use super::image_provider::ImageProvider;
-use crate::vk::Result;
 use crate::vk::*;
 use crate::ffi::vk::*;
 
 use super::material::*;
-use super::aabb::*;
-use super::procedural::*;
 use super::asset::*;
 use super::mesh::*;
 use super::buffer::*;
@@ -56,6 +52,7 @@ impl SceneBuilder {
     }
 }
 
+#[allow(dead_code)]
 pub struct Scene {
     asset: Arc<SceneAsset>,
     command_pool: Arc<CommandPool>,
@@ -199,7 +196,7 @@ impl SceneState {
         } 
     }
 
-    fn update(&mut self, scene: &Scene, delta_time: f32, descriptor_sets: &Arc<RayTracingDescriptorSets>) {
+    fn update(&mut self, _scene: &Scene, _delta_time: f32, _descriptor_sets: &Arc<RayTracingDescriptorSets>) {
 
     }
 }

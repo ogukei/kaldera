@@ -35,7 +35,7 @@ impl OrbitalCamera {
         }
     }
 
-    fn rotate(&mut self, x: f32, y: f32, delta_time: f32) {
+    fn rotate(&mut self, x: f32, y: f32, _delta_time: f32) {
         self.rotation_x += (x / 400.0) * glm::pi::<f32>();
         self.rotation_y += (y / 400.0) * glm::pi::<f32>();
         self.quat_target = orbital_quat(self.rotation_x, self.rotation_y);
@@ -54,11 +54,11 @@ impl Camera for OrbitalCamera {
     fn apply(&mut self, input: InputEvent, delta_time: f32) {
         match input {
             InputEvent::MoveDelta(x, y) => self.rotate(x, y, delta_time),
-            InputEvent::Key(event) => (),
+            InputEvent::Key(_event) => (),
         }
     }
 
-    fn update(&mut self, delta_time: f32) {
+    fn update(&mut self, _delta_time: f32) {
         // TODO(ogukei): adjust speed by over time
         self.quat = glm::quat_slerp(&self.quat, &self.quat_target, 0.15);
         let view = view(&self.quat, self.distance);

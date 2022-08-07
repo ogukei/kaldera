@@ -5,18 +5,10 @@ use nalgebra_glm as glm;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::vk::Result;
 use crate::vk::*;
 use crate::ffi::vk::*;
 
 use libc::c_void;
-
-use gltf::accessor::DataType;
-use gltf::accessor::Dimensions;
-use gltf::Semantic;
-
-use VkMemoryPropertyFlagBits::*;
-use VkBufferUsageFlagBits::*;
 
 use super::asset::*;
 use super::image_provider::ImageProvider;
@@ -73,6 +65,7 @@ impl SceneMeshMaterial {
         Arc::new(mesh_material)
     }
 
+    #[allow(dead_code)]
     pub fn new_placeholder(command_pool: &Arc<CommandPool>) -> Arc<Self> {
         let extent = VkExtent3D {
             width: 1,
@@ -210,6 +203,7 @@ impl<'a, 'b: 'a> MeshNode<'a, 'b> {
     }
 }
 
+#[allow(dead_code)]
 pub struct SceneMeshPrimitive {
     geometry: Arc<SceneMeshPrimitiveGeometry>,
     structure: Arc<BottomLevelAccelerationStructure>,
@@ -224,19 +218,12 @@ impl SceneMeshPrimitive {
         Arc::new(primitive)
     }
 
-    pub fn staging_buffers(&self) -> &Arc<SceneStagingBuffers> {
-        &self.geometry.staging_buffers()
-    }
-
-    pub fn index(&self) -> usize {
-        self.geometry.index()
-    }
-
     pub fn bottom_level_acceleration_structure(&self) -> &Arc<BottomLevelAccelerationStructure> {
         &self.structure
     }
 }
 
+#[allow(dead_code)]
 pub struct SceneMeshPrimitiveGeometry {
     index: usize,
     offset: MeshPrimitiveOffset,
@@ -246,7 +233,7 @@ pub struct SceneMeshPrimitiveGeometry {
 }
 
 impl SceneMeshPrimitiveGeometry {
-    pub fn new(mesh_primitive: &MeshPrimitive, staging_buffers: &Arc<SceneStagingBuffers>, command_pool: &Arc<CommandPool>) -> Arc<Self> {
+    pub fn new(mesh_primitive: &MeshPrimitive, staging_buffers: &Arc<SceneStagingBuffers>, _command_pool: &Arc<CommandPool>) -> Arc<Self> {
         let vertex_stride = std::mem::size_of::<[f32; 3]>();
         let num_vertices = mesh_primitive.primitive().positions().count();
         let num_indices = mesh_primitive.primitive().indices().count();
@@ -269,14 +256,6 @@ impl SceneMeshPrimitiveGeometry {
             material_index: mesh_primitive.primitive.material_index(),
         };
         Arc::new(v)
-    }
-    
-    fn staging_buffers(&self) -> &Arc<SceneStagingBuffers> {
-        &self.staging_buffers
-    }
-
-    fn index(&self) -> usize {
-        self.index
     }
 
     pub fn structure_geometry(&self) -> &Arc<BottomLevelAccelerationStructureGeometry> {

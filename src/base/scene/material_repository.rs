@@ -1,15 +1,7 @@
 
-
-use gltf;
-use nalgebra_glm as glm;
-
-use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use crate::vk::Result;
 use crate::vk::*;
-use crate::ffi::vk::*;
 
 use super::image_provider::ImageProvider;
 use super::material::{
@@ -55,6 +47,7 @@ impl<'a> MaterialRepositoryStateRef<'a> {
         &self.guard.descriptions
     }
 
+    #[allow(dead_code)]
     pub fn replace_material(
         &mut self,
         command_pool: &Arc<CommandPool>,

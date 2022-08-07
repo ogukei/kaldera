@@ -2,29 +2,21 @@
 
 use crate::ffi::vk::*;
 use super::error::Result;
-use super::error::ErrorCode;
-use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
-use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
+use super::device::{Device, CommandPool, CommandBufferBuilder};
 use super::memory::{BufferMemory, ImageMemory};
 
 use std::ptr;
-use std::mem;
 use std::mem::MaybeUninit;
 use libc::{c_float, c_void};
 use std::sync::Arc;
-use std::io::Read;
-use std::ffi::CString;
-
 
 use VkStructureType::*;
-use VkImageUsageFlagBits::*;
-use VkSampleCountFlagBits::*;
 use VkPipelineStageFlagBits::*;
 use VkBufferUsageFlagBits::*;
 use VkMemoryPropertyFlagBits::*;
-use VkPipelineStageFlagBits::*;
 use VkAccessFlagBits::*;
 
+#[allow(dead_code)]
 pub struct ColorImage {
     device: Arc<Device>,
     image: VkImage,
@@ -188,6 +180,7 @@ impl Drop for ColorImage {
     }
 }
 
+#[allow(dead_code)]
 pub struct DepthStencilImage {
     device: Arc<Device>,
     image: VkImage,
@@ -314,6 +307,7 @@ impl Drop for DepthStencilImage {
     }
 }
 
+#[allow(dead_code)]
 pub struct DepthImage {
     device: Arc<Device>,
     image: VkImage,
@@ -1005,6 +999,7 @@ impl Drop for TextureImage {
     }
 }
 
+#[allow(dead_code)]
 pub struct Texture {
     device: Arc<Device>,
     buffer_memory: Arc<BufferMemory>,
