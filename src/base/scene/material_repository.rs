@@ -51,10 +51,11 @@ impl<'a> MaterialRepositoryStateRef<'a> {
     pub fn replace_material(
         &mut self,
         command_pool: &Arc<CommandPool>,
+        queue_submit: &Arc<QueueSubmit>,
         image_provider: &ImageProvider,
         material: &Material,
         material_index: usize) 
     {
-        self.guard.replace_material(command_pool, image_provider, material, material_index)
+        self.guard.replace_material(command_pool, queue_submit, image_provider, material, material_index)
     }
 }

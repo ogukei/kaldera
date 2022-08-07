@@ -11,7 +11,6 @@ use super::image as scene_image;
 use super::mesh::*;
 use super::image_provider::ImageProvider;
 
-
 pub struct Material<'a> {
     material: gltf::material::Material<'a>,
 }
@@ -204,10 +203,12 @@ pub struct MaterialDescriptionsTextures {
 
 impl MaterialDescriptionsTextures {
     pub fn new(materials: &[Material], image_provider: &ImageProvider, command_pool: &Arc<CommandPool>) -> Self {
+        let queue_submit = QueueSubmit::new(command_pool.queue());
         let materials: Vec<_> = materials.iter()
-            .map(|v| SceneMeshMaterial::new(v, image_provider, command_pool))
-            //.map(|v| SceneMeshMaterial::new_placeholder(command_pool))
+            .map(|v| SceneMeshMaterial::new(v, image_provider, command_pool, &queue_submit))
+            //.map(|v| SceneMeshMaterial::new_placeholder(command_pool, &queue_submit))
             .collect();
+        queue_submit.execute().unwrap();
         let mut descriptions: Vec<SceneMaterialDescription> = vec![];
         let mut textures: Vec<Arc<Texture>> = vec![];
         for material in materials.iter() {
@@ -240,8 +241,8 @@ impl MaterialDescriptionsTextures {
         }
     }
 
-    pub fn replace_material(&mut self, command_pool: &Arc<CommandPool>, image_provider: &ImageProvider, material: &Material, material_index: usize) {
-        let mesh_material = SceneMeshMaterial::new(material, image_provider, command_pool);
+    pub fn replace_material(&mut self, command_pool: &Arc<CommandPool>, queue_submit: &Arc<QueueSubmit>, image_provider: &ImageProvider, material: &Material, material_index: usize) {
+        let mesh_material = SceneMeshMaterial::new(material, image_provider, command_pool, queue_submit);
         // color
         let color_texture_index: i32;
         if let Some(color_texture) = mesh_material.color_texture() {
