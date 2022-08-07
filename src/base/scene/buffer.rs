@@ -109,9 +109,9 @@ impl SceneStagingBuffers {
             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT as VkMemoryPropertyFlags,
             color_buffer_size as VkDeviceSize,
         ).unwrap();
-        // TODO(ogukei): concurrent uploads
         unsafe {
-            index_buffer.update(index_buffer_size as VkDeviceSize, |data| {
+            let queue_submit = QueueSubmit::new(command_pool.queue());
+            index_buffer.defer_update(&queue_submit, index_buffer_size as VkDeviceSize, |data| {
                 let data = data as *mut u8;
                 for primitive in primitives.iter() {
                     let byte_size = primitive.primitive().indices().count() * std::mem::size_of::<u32>();
@@ -121,7 +121,7 @@ impl SceneStagingBuffers {
                     std::ptr::copy_nonoverlapping(src, dst, byte_size);
                 }
             });
-            vertex_buffer.update(vertex_buffer_size as VkDeviceSize, |data| {
+            vertex_buffer.defer_update(&queue_submit, vertex_buffer_size as VkDeviceSize, |data| {
                 let data = data as *mut u8;
                 for primitive in primitives.iter() {
                     let byte_size = primitive.primitive().positions().count() * std::mem::size_of::<[f32; 3]>();
@@ -131,7 +131,7 @@ impl SceneStagingBuffers {
                     std::ptr::copy_nonoverlapping(src, dst, byte_size);
                 }
             });
-            normals_buffer.update(normals_buffer_size as VkDeviceSize, |data| {
+            normals_buffer.defer_update(&queue_submit, normals_buffer_size as VkDeviceSize, |data| {
                 let data = data as *mut u8;
                 for primitive in primitives.iter() {
                     let byte_size = primitive.primitive().normals().count() * std::mem::size_of::<[f32; 3]>();
@@ -141,12 +141,12 @@ impl SceneStagingBuffers {
                     std::ptr::copy_nonoverlapping(src, dst, byte_size);
                 }
             });
-            description_buffer.update(description_buffer_size as VkDeviceSize, |data| {
+            description_buffer.defer_update(&queue_submit, description_buffer_size as VkDeviceSize, |data| {
                 let dst = data as *mut u8;
                 let src = descriptions.as_ptr() as *const u8;
                 std::ptr::copy_nonoverlapping(src, dst, description_buffer_size);
             });
-            texcoord_buffer.update(texcoord_buffer_size as VkDeviceSize, |data| {
+            texcoord_buffer.defer_update(&queue_submit, texcoord_buffer_size as VkDeviceSize, |data| {
                 let data = data as *mut u8;
                 for primitive in primitives.iter() {
                     let byte_size = primitive.primitive().texcoords().count() * std::mem::size_of::<[f32; 2]>();
@@ -156,12 +156,12 @@ impl SceneStagingBuffers {
                     std::ptr::copy_nonoverlapping(src, dst, byte_size);
                 }
             });
-            material_description_buffer.update(material_description_buffer_size as VkDeviceSize, |data| {
+            material_description_buffer.defer_update(&queue_submit, material_description_buffer_size as VkDeviceSize, |data| {
                 let dst = data as *mut u8;
                 let src = material_descriptions.as_ptr() as *const u8;
                 std::ptr::copy_nonoverlapping(src, dst, material_description_buffer_size);
             });
-            tangent_buffer.update(tangent_buffer_size as VkDeviceSize, |data| {
+            tangent_buffer.defer_update(&queue_submit, tangent_buffer_size as VkDeviceSize, |data| {
                 let data = data as *mut u8;
                 for primitive in primitives.iter() {
                     if let Some(tangents) = primitive.primitive().tangents() {
@@ -176,7 +176,7 @@ impl SceneStagingBuffers {
                 }
             });
             if has_colors {
-                color_buffer.update(color_buffer_size as VkDeviceSize, |data| {
+                color_buffer.defer_update(&queue_submit, color_buffer_size as VkDeviceSize, |data| {
                     let data = data as *mut u8;
                     for primitive in primitives.iter() {
                         if let Some(colors) = primitive.primitive().colors() {
@@ -195,6 +195,7 @@ impl SceneStagingBuffers {
                 // ignores vertex color multipliers.
                 // assumes the shader does not access the buffer.
             }
+            queue_submit.execute().unwrap();
         }
         let buffer = Self {
             vertex_buffer,

@@ -1,5 +1,6 @@
 
 use crate::ffi::vk::*;
+use super::QueueSubmit;
 use super::error::Result;
 use super::error::ErrorCode;
 use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder};
@@ -445,6 +446,20 @@ impl DedicatedStagingBuffer {
         vkUnmapMemory(device.handle(), host_buffer_memory.memory());
         self.copying_command_buffer
             .submit_then_wait(VK_PIPELINE_STAGE_TRANSFER_BIT as VkPipelineStageFlags);
+    }
+
+    pub unsafe fn defer_update(&self, queue_submit: &Arc<QueueSubmit>, size: VkDeviceSize, func: impl FnOnce(*mut c_void)) {
+        assert_eq!(size, self.size);
+        let device = self.command_pool.queue().device();
+        let host_buffer_memory = &self.host_buffer_memory;
+        let mut mapped = MaybeUninit::<*mut c_void>::zeroed();
+        vkMapMemory(device.handle(), host_buffer_memory.memory(), 0, size, 0, mapped.as_mut_ptr())
+            .into_result()
+            .unwrap();
+        let mapped = mapped.assume_init();
+        func(mapped);
+        vkUnmapMemory(device.handle(), host_buffer_memory.memory());
+        queue_submit.defer_submit(&self.copying_command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT as VkPipelineStageFlags);
     }
 
     #[inline]

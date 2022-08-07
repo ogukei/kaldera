@@ -20,6 +20,7 @@ mod device_queues;
 mod memory;
 mod geometry;
 mod model;
+mod queue_submit;
 
 mod staging;
 mod image;
@@ -38,6 +39,7 @@ pub use device_queues::*;
 pub use memory::*;
 pub use geometry::*;
 pub use model::*;
+pub use queue_submit::*;
 
 pub use staging::*;
 pub use crate::vk::image::*;
