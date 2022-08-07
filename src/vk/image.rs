@@ -1,6 +1,7 @@
 
 
 use crate::ffi::vk::*;
+use super::QueueSubmit;
 use super::error::Result;
 use super::device::{Device, CommandPool, CommandBufferBuilder};
 use super::memory::{BufferMemory, ImageMemory};
@@ -1009,8 +1010,9 @@ pub struct Texture {
 impl Texture {
     pub fn new(
         command_pool: &Arc<CommandPool>,
+        queue_submit: &Arc<QueueSubmit>,
         texture_image: &Arc<TextureImage>, 
-        data: *const c_void, 
+        data: *const c_void,
         data_size: usize,
     ) -> Result<Arc<Self>> {
         unsafe {
@@ -1032,11 +1034,7 @@ impl Texture {
             let command_buffer = CommandBufferBuilder::new(command_pool).build(|command_buffer| {
                 texture_image.command_transfer_to_device(command_buffer, &buffer_memory);
             });
-            // TODO(ogukei): wait fence
-            let command_buffers = vec![command_buffer.handle()];
-            command_pool.queue()
-                .submit_then_wait(&command_buffers)
-                .unwrap();
+            queue_submit.defer_submit(&command_buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT as VkPipelineStageFlags);
             let image_buffer_memory = Self {
                 device: Arc::clone(device),
                 texture_image: Arc::clone(texture_image),

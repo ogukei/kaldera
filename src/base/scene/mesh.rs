@@ -22,7 +22,7 @@ pub struct SceneMeshMaterial {
 }
 
 impl SceneMeshMaterial {
-    pub fn new(material: &Material, image_provider: &ImageProvider, command_pool: &Arc<CommandPool>) -> Arc<Self> {
+    pub fn new(material: &Material, image_provider: &ImageProvider, command_pool: &Arc<CommandPool>, queue_submit: &Arc<QueueSubmit>) -> Arc<Self> {
         log_debug!("loading material {}", material.name().unwrap_or(""));
         let image_data = MaterialImageData::new(material, image_provider).unwrap();
         let images = MaterialImages::new(&image_data).unwrap();
@@ -39,7 +39,7 @@ impl SceneMeshMaterial {
                 let device = command_pool.queue().device();
                 let mipmaps = true;
                 let texture_image = TextureImage::new(device, extent, VkFormat::VK_FORMAT_R8G8B8A8_SRGB, mipmaps).unwrap();
-                let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
+                let texture = Texture::new(command_pool, queue_submit, &texture_image, data, data_size).unwrap();
                 texture
             });
         let normal_texture = images.normal_image()
@@ -55,7 +55,7 @@ impl SceneMeshMaterial {
                 let device = command_pool.queue().device();
                 let mipmaps = true;
                 let texture_image = TextureImage::new(device, extent, VkFormat::VK_FORMAT_R8G8B8A8_UNORM, mipmaps).unwrap();
-                let texture = Texture::new(command_pool, &texture_image, data, data_size).unwrap();
+                let texture = Texture::new(command_pool, queue_submit, &texture_image, data, data_size).unwrap();
                 texture
             });
         let mesh_material = Self {
@@ -66,7 +66,7 @@ impl SceneMeshMaterial {
     }
 
     #[allow(dead_code)]
-    pub fn new_placeholder(command_pool: &Arc<CommandPool>) -> Arc<Self> {
+    pub fn new_placeholder(command_pool: &Arc<CommandPool>, queue_submit: &Arc<QueueSubmit>) -> Arc<Self> {
         let extent = VkExtent3D {
             width: 1,
             height: 1,
@@ -77,7 +77,7 @@ impl SceneMeshMaterial {
         let device = command_pool.queue().device();
         let mipmaps = false;
         let texture_image = TextureImage::new(device, extent, VkFormat::VK_FORMAT_R8G8B8A8_SRGB, mipmaps).unwrap();
-        let texture = Texture::new(command_pool, &texture_image, data.as_ptr() as *const c_void, data.len()).unwrap();
+        let texture = Texture::new(command_pool, queue_submit, &texture_image, data.as_ptr() as *const c_void, data.len()).unwrap();
         let mesh_material = Self {
             color_texture: Some(texture),
             normal_texture: None,
