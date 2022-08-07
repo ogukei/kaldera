@@ -204,6 +204,11 @@ impl CommandBuffer {
     pub fn handle(&self) -> VkCommandBuffer {
         self.handle
     }
+
+    #[inline]
+    pub(crate) fn fence(&self) -> VkFence {
+        self.fence
+    }
 }
 
 impl Drop for CommandBuffer {
