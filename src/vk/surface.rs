@@ -5,13 +5,9 @@ use crate::ffi::xcb::*;
 
 use super::error::Result;
 use super::error::ErrorCode;
-use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
-use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder};
+use super::instance::{Instance, QueueFamily, PhysicalDevice};
 
-use std::ptr;
-use std::mem;
 use std::mem::MaybeUninit;
-use libc::{c_float, c_void};
 use std::sync::Arc;
 
 pub enum Surface {
@@ -93,6 +89,7 @@ impl Surface {
     }
 }
 
+#[allow(dead_code)]
 pub struct XcbSurface {
     instance: Arc<Instance>,
     window: Arc<XcbWindow>,

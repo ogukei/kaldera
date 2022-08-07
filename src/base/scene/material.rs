@@ -1,19 +1,16 @@
 
 use gltf;
-use nalgebra_glm as glm;
 
-use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 
 use crate::vk::Result;
 use crate::vk::*;
-use crate::ffi::vk::*;
+
+use super::image as scene_image;
 
 use super::mesh::*;
 use super::image_provider::ImageProvider;
 
-use super::image as scene_image;
 
 pub struct Material<'a> {
     material: gltf::material::Material<'a>,
@@ -28,10 +25,6 @@ impl<'a> Material<'a> {
 
     pub fn name(&self) -> Option<&'a str> {
         self.material.name()
-    }
-
-    pub fn image_sources(&self) -> MaterialImageSources {
-        MaterialImageSources::new(&self.material)
     }
 
     fn material(&self) -> &gltf::material::Material<'a> {

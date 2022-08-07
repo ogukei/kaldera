@@ -5,20 +5,18 @@ use gltf::image;
 
 use base64;
 use image_crate;
-use image_crate::imageops::FilterType;
+use image_crate::ImageFormat::{Jpeg, Png};
 
 use crate::vk::Result;
 use crate::vk::*;
 
 use crate::base::scene::image as scene_image;
 
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Arc;
 
-use image_crate::ImageFormat::{Jpeg, Png};
 
 pub struct SceneAsset {
     document: gltf::Document,

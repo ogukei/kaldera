@@ -3,17 +3,13 @@ use crate::ffi::vk::*;
 
 use super::error::Result;
 use super::error::ErrorCode;
-use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
-use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, Queue};
+use super::device::{Device};
 use super::surface::{Surface};
 use super::device_queues::{DeviceQueues};
-use super::memory::ImageMemory;
 use super::image::DepthImage;
 
 use std::ptr;
-use std::mem;
 use std::mem::MaybeUninit;
-use libc::{c_float, c_void};
 use std::sync::{Arc, Mutex};
 
 pub struct Swapchain {
@@ -193,7 +189,7 @@ impl Drop for Swapchain {
 
 pub struct SwapchainImage {
     index: usize,
-    handle: VkImage,
+    _handle: VkImage,
     view: VkImageView,
     device: Arc<Device>,
 }
@@ -222,7 +218,7 @@ impl SwapchainImage {
         let view_handle = view_handle.assume_init();
         let image = SwapchainImage {
             index,
-            handle,
+            _handle: handle,
             view: view_handle,
             device: Arc::clone(device),
         };
@@ -367,7 +363,7 @@ impl Drop for SceneRenderPass {
     }
 }
 
-
+#[allow(dead_code)]
 pub struct SwapchainFramebuffers {
     swapchain: Arc<Swapchain>,
     depth_image: Arc<DepthImage>,

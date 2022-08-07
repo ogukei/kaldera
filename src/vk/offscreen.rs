@@ -1,22 +1,15 @@
 
 use crate::ffi::vk::*;
 use super::error::Result;
-use super::error::ErrorCode;
-use super::instance::{Instance, QueueFamily, PhysicalDevice, PhysicalDevicesBuilder};
-use super::device::{Device, CommandPool, CommandBuffer, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
-use super::memory::{StagingBuffer, StagingBufferUsage, ImageMemory};
+use super::device::{Device, CommandPool, CommandBufferBuilder, ShaderModule, ShaderModuleSource};
 use super::staging::VertexStagingBuffer;
-use super::geometry::{Vec3, Vec4};
+use super::geometry::{Vec3};
 use super::image::{ColorImage, DepthImage};
-use super::model::Vertex;
-use super::swapchain::{SwapchainFramebuffer};
 
 use std::ptr;
-use std::mem;
 use std::mem::MaybeUninit;
-use libc::{c_float, c_void};
+use libc::{c_float};
 use std::sync::Arc;
-use std::io::Read;
 use std::ffi::CString;
 
 pub struct OffscreenRenderPass {
@@ -275,6 +268,7 @@ impl Drop for OffscreenGraphicsPipelineLayout {
     }
 }
 
+#[allow(dead_code)]
 pub struct OffscreenGraphicsPipeline {
     render_pass: Arc<OffscreenRenderPass>,
     layout: Arc<OffscreenGraphicsPipelineLayout>,
@@ -504,6 +498,7 @@ impl Drop for OffscreenGraphicsPipeline {
     }
 }
 
+#[allow(dead_code)]
 pub struct OffscreenGraphicsRender {
     command_pool: Arc<CommandPool>,
     pipeline: Arc<OffscreenGraphicsPipeline>,

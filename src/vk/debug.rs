@@ -1,12 +1,10 @@
 
-
 use crate::ffi::vk::*;
 
 use std::ptr;
-use std::mem;
 use std::mem::MaybeUninit;
 use std::ffi::CStr;
-use libc::{c_float, c_void};
+use libc::{c_void};
 
 use VkStructureTypeExt::*;
 use VkDebugUtilsMessageSeverityFlagBitsEXT::*;
